@@ -190,7 +190,7 @@ with col4:
 # ALL-IN-ONE INTEGRATED VISUALS (Plotly Subplots)
 # ==============================================================================
 st.markdown("---")
-st.subheader(T("2. ALL-IN-ONE STRUCTURAL TELEMETRY", "2. ĐỒ THỊ CHỈ BÁO CẤU TRÚC (TELEMETRY)"))
+st.subheader(T("1. ALL-IN-ONE STRUCTURAL TELEMETRY", "1. ĐỒ THỊ CHỈ BÁO CẤU TRÚC (TELEMETRY)"))
 
 fig = make_subplots(
     rows=2, cols=1, 
@@ -281,7 +281,7 @@ st.markdown("---")
 col_plot, col_log = st.columns([1, 1])
 
 with col_plot:
-    st.subheader(T("3. UNSUPERVISED LEARNING DS PROOF", "3. BẰNG CHỨNG HỌC MÁY GMM"))
+    st.subheader(T("2. UNSUPERVISED LEARNING DS PROOF", "2. BẰNG CHỨNG HỌC MÁY GMM"))
     st.markdown(T(
         "Scatter plot proving the GMM Model dynamically clusters market states (Entropy vs. Volatility) purely mathematically without human labels.",
         "Biểu đồ Scatter chứng minh Mô hình GMM tự động gom cụm trạng thái thị trường hoàn toàn dựa trên toán học (Entropy vs Volatility), không cần dán nhãn từ con người."
@@ -315,7 +315,7 @@ with col_plot:
 # AGENT ORCHESTRATOR DIAGNOSTIC
 # ==============================================================================
 with col_log:
-    st.subheader(T("4. 🤖 AGENT ORCHESTRATOR DIAGNOSTIC", "4. 🤖 PHÂN TÍCH TỪ AGENT ORCHESTRATOR"))
+    st.subheader(T("3. 🤖 AGENT ORCHESTRATOR DIAGNOSTIC", "3. 🤖 PHÂN TÍCH TỪ AGENT ORCHESTRATOR"))
     st.markdown(T("Real-time generative LLM Diagnostic mimicking the ReAct Loop:", "Phân tích tự động giả lập vòng lặp ReAct của LLM Agent:"))
     
     # Synthesize an Agent Diagnostic String
