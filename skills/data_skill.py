@@ -1,5 +1,5 @@
 """
-Data Ingestion Layer -- InfoStat Dynamics
+Data Ingestion Layer -- Financial Entropy Agent
 Thu thap du lieu thi truong VN-Index va ro VN30 tu vnstock / yfinance.
 """
 

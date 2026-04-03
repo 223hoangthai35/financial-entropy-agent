@@ -1,5 +1,5 @@
 """
-Quantitative Physics Engine -- InfoStat Dynamics
+Quantitative Physics Engine -- Financial Entropy Agent
 WPE, Statistical Complexity, MFI, Cross-Sectional Entropy, CECP Boundary.
 Toi uu bang @numba.njit va numpy vectorized.
 """

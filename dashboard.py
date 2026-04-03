@@ -1,5 +1,5 @@
 """
-InfoStat Dynamics -- High-End Professional Dashboard
+Financial Entropy Agent -- High-End Professional Dashboard
 Dual Pipeline (API/Upload), All-in-One Subplots, GMM Scatter, Agent Log.
 """
 
@@ -20,7 +20,7 @@ from skills.ds_skill import fit_predict_regime
 # ==============================================================================
 # UI CONFIGURATION & MULTILINGUAL SUPPORT
 # ==============================================================================
-st.set_page_config(page_title="InfoStat Dynamics | Terminal", layout="wide", page_icon="⚡")
+st.set_page_config(page_title="Financial Entropy Agent | Terminal", layout="wide", page_icon="⚡")
 
 # Custom Styling (Dark Quant Theme)
 st.markdown("""
@@ -144,7 +144,7 @@ if uploaded_file is not None:
 # ==============================================================================
 # MAIN DASHBOARD
 # ==============================================================================
-st.title(T("INFOSTAT DYNAMICS: SYSTEM ARCHITECT", "INFOSTAT DYNAMICS: SYSTEM ARCHITECT"))
+st.title(T("FINANCIAL ENTROPY AGENT: SYSTEM ARCHITECT", "FINANCIAL ENTROPY AGENT: SYSTEM ARCHITECT"))
 st.markdown(T(
     "Monitoring systemic resilience, capital fragmentation, and structural chaos.",
     "Theo dõi sức khỏe hệ thống, sự phân mảnh dòng tiền và rủi ro cấu trúc thị trường."
@@ -365,7 +365,7 @@ csv_data = df.to_csv().encode('utf-8')
 st.sidebar.download_button(
     label=T("📥 Export Current Analysis (CSV)", "📥 Xuất Dữ Liệu Hiện Tại (CSV)"),
     data=csv_data,
-    file_name="infostat_dynamics_export.csv",
+    file_name="financial_entropy_agent_export.csv",
     mime="text/csv",
     use_container_width=True
 )

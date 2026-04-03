@@ -1,5 +1,5 @@
 """
-Data Science / ML Layer -- InfoStat Dynamics
+Data Science / ML Layer -- Financial Entropy Agent
 Unsupervised Regime Classification su dung Gaussian Mixture Model.
 """
 

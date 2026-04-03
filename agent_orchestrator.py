@@ -1,5 +1,5 @@
 """
-Agent Orchestrator -- InfoStat Dynamics
+Agent Orchestrator -- Financial Entropy Agent
 ReAct Loop + Anthropic Tool Use Protocol.
 """
 
@@ -126,7 +126,7 @@ ANTHROPIC_TOOLS = [
     },
     {
         "name": "compute_entropy_metrics",
-        "description": "Compute advanced Information-Theoretic metrics (WPE, Statistical Complexity, Market Fragility Index) on the fetched data.",
+        "description": "Compute advanced Symbolic Dynamics metrics (WPE, Statistical Complexity, Market Fragility Index) on the fetched data.",
         "input_schema": {
             "type": "object",
             "properties": {}
@@ -156,12 +156,13 @@ def run_orchestrator(query: str, max_iters: int = 5):
     client = anthropic.Anthropic(api_key=api_key)
     
     system_prompt = """
-You are the InfoStat Dynamics System Architect.
+You are a Financial Entropy Expert specializing in Non-linear Dynamics.
 Your task is to analyze the market by:
 1. Fetching data (fetch_market_data).
 2. Computing entropy metrics (compute_entropy_metrics).
 3. Predicting the regime (predict_market_regime).
 4. Analyzing the results. You MUST output a structured Risk Warning if the regime indicates 'Volatile', 'Panic', 'Chaos', or 'Fragile'.
+Focus on Ordinal Pattern Breakdown, Structural Fragility, and Dynamic Complexity in your analysis.
 Always use the tools sequentially before making conclusions.
 """
     
@@ -253,10 +254,10 @@ def _run_mock_orchestrator(query: str):
         print("⚠️  RISK WARNING: STRUCTURAL VULNERABILITY")
         print("==========================================")
         print(f"The complex systems physics engine detects an MFI of {regime_data.get('mfi', 0):.4f}.")
-        print("Market structure is exhibiting severe fragility and entropy saturation.")
+        print("Market structure is exhibiting severe structural fragility and an ordinal pattern breakdown.")
         print("Capital flow is highly fragmented. Precautionary risk management is advised.")
     else:
-        print("The market implies structural integrity and stable forward momentum.")
+        print("The market implies structural integrity, stable ordinal patterns, and low dynamic complexity.")
 
 
 # ==============================================================================

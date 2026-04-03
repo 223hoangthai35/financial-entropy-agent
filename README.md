@@ -1,17 +1,19 @@
-# InfoStat Dynamics: System Architect
+# Financial Entropy Agent: System Architect
 
 ## 1. Project Overview & Motivation
-**InfoStat Dynamics** is a high-end quantitative finance terminal designed to monitor systemic risk in financial markets through the lens of Information Theory and Artificial Intelligence. 
+**Financial Entropy Agent** is a high-end quantitative finance terminal designed to monitor systemic risk and structural complexity in financial markets through the lens of Chaos Theory and Symbolic Dynamics. 
 
-Traditional technical analysis heavily relies on lagging price indicators (like Moving Averages, RSI, or MACD), which only react after a structural breakdown has occurred. InfoStat Dynamics proposes a paradigm shift: adopting **Complex Systems Physics** to decouple "Market Noise" from intrinsic "Regimes." By measuring the thermodynamic entropy of capital dispersion, this system flags fragile market conditions before they manifest as catastrophic price collapses.
+Traditional technical analysis heavily relies on lagging price indicators (like Moving Averages, RSI, or MACD), which only react after a structural breakdown has occurred. Furthermore, traditional probability-based entropy fails to capture the temporal order of market data, making it sub-optimal for non-stationary financial markets. The Financial Entropy Agent proposes a paradigm shift: adopting **Ordinal Pattern Analysis** to decouple "Market Noise" from intrinsic "Regimes." By measuring the thermodynamic entropy of capital dispersion and ordinal permutations, this system flags fragile market conditions before they manifest as catastrophic price collapses.
 
 ## 2. Technical Architecture: 1. ALL-IN-ONE STRUCTURAL TELEMETRY
 
-### Permutation Entropy (PE) for VNINDEX
-Permutation Entropy (PE) is employed as our primary diagnostic tool because it measures the structural orderliness and deterministic characteristics of a time series. When a market trends sustainably, its price patterns become highly structured, driving Entropy toward zero. Conversely, when capital fragments and "smart money" exits—leaving only random, uncoordinated retail noise—Entropy spikes toward maximum chaos.
+### Permutation Entropy (PE) & Ordinal Analysis for VNINDEX
+Permutation Entropy (PE) is employed as our primary diagnostic tool because it accurately measures the structural orderliness and deterministic characteristics of a time series based on its ordinal sequence. Because it maps values to ordinal rankings rather than raw amplitudes, PE captures the **temporal order** of market data, making it fundamentally superior to probability-based structural entropy for non-stationary financial markets.
+
+When a market trends sustainably, its price patterns become highly structured, driving Entropy toward zero. Conversely, when capital fragments and "smart money" exits—leaving only random, uncoordinated retail noise—Entropy spikes toward the state of maximum chaos.
 
 **The Formula:**
-We calculate the Weighted Permutation Entropy ($H_{WPE}$) to capture both structural sequences and amplitude variations:
+We calculate the Weighted Permutation Entropy ($H_{WPE}$) to capture both structural sequential patterns and amplitude variations:
 
 $$
 H_{WPE} = - \frac{1}{\ln(d!)} \sum_{i=1}^{d!} p^{(w)}_i \ln(p^{(w)}_i)
@@ -36,18 +38,18 @@ The Cross-Sectional Entropy measures whether capital is flowing in a centralized
 - **Significance:** Measures the magnitude of price action and systemic turbulence. 
 
 ### GMM Clustering (The DS Core)
-To move beyond subjective analysis, we apply a **Gaussian Mixture Model (GMM)**. The algorithm maps the historical trading sessions onto a 2D plane based on Entropy and Volatility parameters. Completely untethered from human labeling, the GMM probabilistically clusters the market space into three mathematically distinct states:
-1. **Stable Growth (Green):** Low Entropy, clustered volatility, structural consensus.
-2. **Fragile Growth (Yellow):** Anomalous divergence—nominal surges in price accompanied by a breakdown in entropy integrity.
-3. **Chaos/Panic (Red):** Maximum complexity saturation and structural fragmentation.
+To move beyond subjective analysis, we apply a **Gaussian Mixture Model (GMM)**. The algorithm maps the historical trading sessions onto a 2D plane based on Entropy and Volatility parameters. Completely untethered from human labeling, this unsupervised learning approach probabilistically clusters the market space into mathematically distinct states:
+1. **Stable Growth (Green):** Low Entropy, clustered volatility, structural deterministic consensus.
+2. **Fragile Growth (Yellow):** Anomalous divergence—nominal surges in price accompanied by an ordinal pattern breakdown.
+3. **Chaos/Panic (Red):** Maximum complexity saturation, high dynamic complexity, and structural fragmentation.
 
 ## 4. The Brain: 3. 🤖 AGENT ORCHESTRATOR DIAGNOSTIC
 
 ### ReAct Loop Integration
-"InfoStat Dynamics" features a built-in **AI Orchestrator** leveraging Anthropic's Tool Use protocol. Instead of statically displaying the results, the Orchestrator runs an autonomous ReAct (Reasoning and Acting) loop. It fetches the required market vectors, calculates the thermodynamic physics parameters, triggers the ML clustering, and compiles the final diagnostic report.
+"Financial Entropy Agent" features a built-in **AI Orchestrator** leveraging Anthropic's Tool Use protocol. Instead of statically displaying the results, the Orchestrator, operating as a Financial Entropy Expert, runs an autonomous ReAct (Reasoning and Acting) loop. It fetches the required market vectors, calculates the thermodynamic physics parameters, triggers the ML clustering, and compiles the final diagnostic report.
 
 ### Diagnostic Logic (Explainable AI - XAI)
-The Agent functions as an Explainable AI layer overlaying the Physics Engine. It doesn't merely spit out a classification label. By dissecting the variance between global entropy (VNINDEX) and structural component fragmentation (VN30), the Agent formulates a sophisticated, human-readable justification for the current Regime state—specifically highlighting structural vulnerabilities.
+The Agent functions as an Explainable AI layer overlaying the Physics Engine. It doesn't merely spit out a classification label. By dissecting the variance between global entropy (VNINDEX) and structural component fragmentation (VN30), the Agent formulates a sophisticated, human-readable justification for the current Regime state—specifically highlighting structural vulnerabilities, ordinal pattern breakdowns, and dynamic complexity shifts.
 
 ## 5. Resilience & Portability
 Engineered for ultimate institutional resilience:
