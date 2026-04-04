@@ -1,302 +1,299 @@
 # Financial Entropy Agent -- Dual-Plane Architecture Blueprint
 
-> **Muc tieu**: He thong Multi-Modal Systemic Risk Engine quan sat thi truong qua **hai mat phang 
-> Unsupervised Learning doc lap** -- Price Dynamics va Liquidity Structure. Agent Orchestrator 
-> (Anthropic Claude) dong vai tro **Cross-Plane Reasoning Engine**, xac nhan Price Physics 
-> bang Liquidity Structure thong qua vong lap **ReAct** va **Tool Use** protocol.
+> **Objective**: The Multi-Modal Systemic Risk Engine observes the market through **two independent Unsupervised Learning planes** -- Price Dynamics and Liquidity Structure. The Agent Orchestrator (Anthropic Claude) acts as a **Cross-Plane Reasoning Engine**, confirming Price Physics with Liquidity Structure via the **ReAct** loop and **Tool Use** protocol.
 
 ---
 
-## 1. Tong quan Kien truc -- Dual-Plane Engine
+## 1. Architecture Overview -- Dual-Plane Engine
 
-```
+```text
 +-------------------------------------------------+
 |             agent_orchestrator.py               |
 |         Cross-Plane Reasoning Engine            |
-|       (ReAct Loop + Anthropic Tool Use)         |
+|       (Macro-Micro Fusion & ReAct Loop)         |
 +-------------------------------------------------+
          /                |                \
-        /                 |                 \
 +-------------+   +---------------+   +---------------+
 | data_skill  |   |  quant_skill  |   |   ds_skill    |
-|    .py      |   |      .py      |   |     .py       |
 +-------------+   +---------------+   +---------------+
-| vnstock     |   | WPE, MFI      |   | Price GMM     |
-| VN30 fetch  |   | Vol Shannon   |   | Volume GMM    |
-| Fallback    |   | Vol SampEn    |   | Regime Map    |
-+-------------+   +---------------+   +---------------+
-       |                  |                   |
-       v                  v                   v
- [Market Data]    [Entropy Metrics]     [Dual Labels]
-       |                  |                   |
-       +----------+-------+-------+-----------+
-                  |               |
-                  v               v
-        +=================+ +=================+
-        |     PLANE 1     | |     PLANE 2     |
-        | Price Dynamics  | |    Liquidity    |
-        | X: WPE          | | X: Shannon Ent  |
-        | Y: Volatility   | | Y: Sample Ent   |
-        | Physical Chaos  | | Liq. Structure  |
-        +=================+ +=================+
-                  \               /
-                   \             /
-                    v           v
+| Market Data |   | PE, V, a (P1) |   | GMM Clusters  |
+| VN30 fetch  |   | Vol Pipeline  |   | Regime Map    |
++-------------+   +-------+-------+   +---------------+
+          |               |                   |
+          |       [PLANE 1: PRICE]     [PLANE 2: VOLUME]
+          |       Physics Dynamics     Macro-Micro Fusion
+          |               |            /             \
+          v               v           v               v
+    [Index Data]    [WPE, V, a]   [Macro Z]   [Rolling Z + Ent]
+          |               |           |               |
+          |               |           |               |
+    +=====v===============v===+   +===v===============v=====+
+    |         PLANE 1         |   |         PLANE 2         |
+    |     Price Dynamics      |   |     Liquidity Space     |
+    +=========================+   +=========================+
+                  \                         /
+                   \                       /
              +=============================+
              |    CROSS-PLANE SYNTHESIS    |
-             |-----------------------------|
-             | Accumulation | Breakdown    |
-             | Exhaustion   | Coherent     |
+             | (Price Chaos + Liquidity F.) |
              +=============================+
 ```
 
-### Dinh nghia Hai Mat Phang
+### Dual-Plane Definitions
 
-| Mat Phang | Truc X | Truc Y | Do luong | Muc dich |
+| Plane | X-Axis | Y-Axis | Measurement | Purpose |
 |---|---|---|---|---|
-| **Plane 1: Price Dynamics** | Weighted Permutation Entropy (WPE) | Annualized Volatility | "Physical Chaos" + Kinematic Vectors (V, a) | Do muc do hon loan trong dong luc gia. WPE do tinh ngau nhien cua ordinal patterns, Volatility do bien do dao dong. V = dE/dt (huong), a = d2E/dt2 (luc). |
-| **Plane 2: Liquidity Structure** | Volume Shannon Entropy | Volume Sample Entropy | "Liquidity Structure" | Do cau truc dong tien. Shannon do su phan tan/tap trung cua volume. SampEn do tinh quy luat cua xung volume. |
+| **Plane 1: Price Dynamics** | Weighted Permutation Entropy (WPE) | Annualized Volatility | "Physical Chaos" + Kinematic Vectors (V, a) | Measures the degree of structural disorder in price dynamics. WPE evaluates the randomness of ordinal patterns; Volatility quantifies amplitude fluctuations. V = dE/dt (direction), a = d²E/dt² (momentum force). |
+| **Plane 2: Liquidity Structure (Macro-Micro Fusion)** | Volume Shannon Entropy | Volume Sample Entropy | Macro-Micro Liquidity Status | Measures the structural integrity of capital flow using a dual-path architecture. The Macro component utilizes a Global Z-Score to evaluate absolute systemic liquidity. The Micro component applies a 252-day Rolling Z-Score before entropy computation to isolate localized structural regimes (Consensus vs. Erratic) while neutralizing structural break biases. |
 
-### Vai tro Agent: Cross-Plane Reasoning Engine
+### Agent Role: Cross-Plane Reasoning Engine
 
-Agent khong chi phan tich tung plane rieng le ma thuc hien **tong hop cheo hai mat phang** 
-de phat hien nhung divergence he thong ma khong the nhan thay tu mot goc nhin don le:
+The Agent does not simply analyze each plane in isolation; it performs a **cross-plane synthesis** to detect systemic divergences that are invisible from a single dimensional perspective:
 
-| Price Plane | Volume Plane | Ket luan | Y nghia |
-|---|---|---|---|
-| Fragile/Chaos | Consensus Flow | **STRUCTURAL ACCUMULATION** | Chaos gia bi kiem soat boi thanh khoan co to chuc. Smart Money hap thu. |
-| Fragile/Chaos | Erratic/Noisy Flow | **CRITICAL BREAKDOWN** | Chaos gia duoc khuech dai boi thanh khoan phan manh. Rui ro he thong cao. |
-| Stable Growth | Erratic/Noisy Flow | **TREND EXHAUSTION** | Xu huong gia on dinh nhung cau truc thanh khoan dang do vo. |
-| *Khac* | *Khac* | **SYSTEM COHERENT** | Hai mat phang dong bo. Khong co phan ky cheo. |
+| Price Plane | Volume Plane (Micro) | Macro Condition | Conclusion | Rationale |
+|---|---|---|---|---|
+| Fragile/Chaos | Consensus Flow | Any | **STRUCTURAL ACCUMULATION** | Price chaos is contained by highly organized liquidity, indicating institutional absorption (Smart Money). |
+| Fragile/Chaos | Erratic/Noisy Flow | Moderate/Low Z | **CRITICAL BREAKDOWN** | Price chaos is amplified by fragmented liquidity. Elevated systemic risk with no structural support. |
+| Fragile/Chaos (V>0, a>0) | Erratic/Noisy Flow | Extreme High Z (>2.0) | **CLIMAX DISTRIBUTION** | Massive capital inflow combined with critical price fragility and highly fragmented behavior. A classic bubble burst or blow-off top signature. |
+| Stable Growth | Erratic/Noisy Flow | Any | **TREND EXHAUSTION** | Stable price trends mask an underlying localized breakdown in liquidity structure. |
+| *Other* | *Other* | Any | **SYSTEM COHERENT** | Both planes remain structurally synchronized. No cross-plane divergence detected. |
 
 ---
 
-## 2. Nguyen tac Thiet ke
+## 2. Design Principles
 
-| Nguyen tac | Mo ta |
+| Principle | Description |
 |---|---|
-| **Separation of Concerns** | Moi skill chi chiu trach nhiem duy nhat mot domain (Data / Math / ML). |
-| **DRY** | Moi ham chi duoc dinh nghia mot lan tai skill goc, cac module khac import. |
-| **Vectorized First** | Toan bo phep toan tren mang su dung `numpy` vectorized. Loop chi khi bat buoc va phai dung `@numba.jit(nopython=True)`. |
-| **Type Safety** | Strict type hints cho moi function signature. |
-| **Testable** | Moi file ket thuc bang `if __name__ == "__main__":` block voi du lieu test. |
-| **Dual-Plane Independence** | Hai classifier (Price GMM, Volume GMM) hoat dong doc lap. Agent la diem duy nhat tong hop. |
+| **Separation of Concerns** | Each skill is exclusively responsible for a single domain (Data / Math / ML). |
+| **DRY** | Strict adherence to DRY; functions are defined in the canonical skill module and imported elsewhere. |
+| **Vectorized First** | Array operations must utilize vectorized `numpy` implementations. Loops are strictly limited and require `@numba.jit(nopython=True)`. |
+| **Type Safety** | Comprehensive type hints are enforced for all function signatures. |
+| **Testable** | Every module concludes with an `if __name__ == "__main__":` block containing verification routines. |
+| **Dual-Plane Independence** | The analytical classifiers (Price GMM, Volume GMM) execute with strict independence. The Agent remains the exclusive juncture for cross-plane synthesis. |
 
 ---
 
-## 3. Module Chi tiet
+## 3. Module Details
 
 ### 3.1 `skills/data_skill.py` -- Data Ingestion Layer
 
-**Trach nhiem**: Thu thap du lieu thi truong real-time tu API, xu ly fallback, va chuan hoa output.
+**Responsibility**: Real-time market data acquisition, failover handling, and output normalization.
 
-| Ham | Input | Output | Ghi chu |
+| Function | Input | Output | Notes |
 |---|---|---|---|
 | `fetch_vnindex(ticker, start, end)` | `ticker: str`, `start: str`, `end: str` | DataFrame OHLCV + DatetimeIndex | `vnstock` API. Columns: `Open, High, Low, Close, Volume`. |
-| `fetch_vn30_returns(start, end)` | `start: str`, `end: str` | DataFrame pct_change returns VN30 | `yfinance`. `ffill()` truoc `pct_change()`. |
-| `load_local_file(path)` | `path: str` | DataFrame OHLCV | Fallback. Ho tro `.csv` va `.xlsx`. |
-| `get_latest_market_data(...)` | params | DataFrame OHLCV | Convenience wrapper: API uu tien, fallback neu fail. |
+| `fetch_vn30_returns(start, end)` | `start: str`, `end: str` | DataFrame pct_change returns VN30 | `yfinance`. `ffill()` applied prior to `pct_change()`. |
+| `load_local_file(path)` | `path: str` | DataFrame OHLCV | Fallback mechanism. Supports `.csv` and `.xlsx`. |
+| `get_latest_market_data(...)` | params | DataFrame OHLCV | Convenience wrapper: API priority with local fallback. |
 
 ---
 
 ### 3.2 `skills/quant_skill.py` -- Quantitative Physics Engine
 
-**Trach nhiem**: Tinh toan Symbolic Dynamics (WPE, Complexity, MFI), Volume Entropy (Shannon, SampEn)
-va Cross-Sectional Entropy.
+**Responsibility**: Computation of Symbolic Dynamics (WPE, Complexity, MFI), Volume Entropy (Shannon, SampEn) via Macro-Micro Fusion, and Cross-Sectional Entropy.
 
 #### 3.2.1 Plane 1: Price Entropy
 
-| Ham | Input | Output | Ghi chu |
+| Function | Input | Output | Notes |
 |---|---|---|---|
 | `_calc_wpe_complexity_jit(x, m, tau)` | `np.ndarray`, `int`, `int` | `(H, C)` | Numba JIT. WPE + Jensen-Shannon Complexity. |
-| `calc_rolling_wpe(log_returns, m, tau, window)` | arrays + params | `(wpe_arr, c_arr)` | Rolling window. Numba JIT. |
-| `calc_wpe_complexity(x, m, tau)` | `np.ndarray` | `(float, float)` | Public wrapper single array. |
-| `calc_mfi(wpe, complexity)` | `np.ndarray`, `np.ndarray` | `np.ndarray` | MFI = WPE * (1 - C). Vectorized. |
+| `calc_rolling_wpe(log_returns, m, tau, window)` | arrays + params | `(wpe_arr, c_arr)` | Rolling window evaluation. Numba JIT. |
+| `calc_wpe_complexity(x, m, tau)` | `np.ndarray` | `(float, float)` | Public wrapper for single arrays. |
+| `calc_mfi(wpe, complexity)` | `np.ndarray`, `np.ndarray` | `np.ndarray` | MFI = WPE * (1 - C). Fully vectorized. |
 
-**Kinematic Vectors (tinh trong pipeline, khong phai ham rieng)**:
+**Kinematic Vectors (Processed directly in the pipeline)**:
 
-| Vector | Cong thuc | Tham so | Y nghia |
+| Vector | Formula | Parameters | Interpretation |
 |---|---|---|---|
-| `PE_Velocity` (V) | `df['WPE'].diff(3)` | 3-day momentum | Huong thay doi entropy. V > 0: chaos mo rong. V < 0: trat tu dang hinh thanh. |
-| `PE_Acceleration` (a) | `PE_Velocity.diff(3)` | 3-day momentum | Luc thay doi. a > 0: xu huong dang tang toc. a < 0: dong luc dang can kiet. |
+| `PE_Velocity` (V) | `df['WPE'].diff(3)` | 3-day momentum | Direction of entropy change. V > 0: chaos expanding. V < 0: structural order forming. |
+| `PE_Acceleration` (a) | `PE_Velocity.diff(3)` | 3-day momentum | Momentum force. a > 0: trend is accelerating. a < 0: momentum is exhausting. |
 
-**Xu ly NaN**: `fillna(0)` de tranh break GMM clustering va JSON serialization.
+**Handling NaNs**: Computed as `fillna(0)` to maintain JSON serialization and prevent GMM clustering destabilization.
 
-#### 3.2.2 Plane 2: Volume Entropy
+#### 3.2.2 Plane 2: Volume Entropy (Macro-Micro Fusion)
 
-| Ham | Input | Output | Ghi chu |
+| Function | Input | Output | Notes |
 |---|---|---|---|
-| `_calc_sample_entropy_jit(x, m, r)` | `np.ndarray`, `int`, `float` | `float` | Numba JIT. O(N^2). SampEn = -ln(A/B). |
-| `calc_sample_entropy(x, m, r)` | `np.ndarray` | `float` | Public wrapper. r = 0.2*std neu None. |
-| `calc_shannon_entropy_hist(x, bins)` | `np.ndarray`, `str|int` | `float [0,1]` | Histogram Shannon. bins='auto' (Freedman-Diaconis). |
-| `calc_rolling_volume_entropy(volume, window)` | `np.ndarray`, `int=60` | `(shannon_arr, sampen_arr)` | Rolling wrapper. `log1p` transform. Window=60 cho SampEn hoi tu. |
+| `_calc_sample_entropy_jit(x, m, r)` | `np.ndarray`, `int`, `float` | `float` | Numba JIT. O(N²). SampEn = -ln(A/B). |
+| `calc_sample_entropy(x, m, r)` | `np.ndarray` | `float` | Public wrapper. Adaptively configures r if unspecified. |
+| `calc_shannon_entropy_hist(x, bins)` | `np.ndarray`, `str|int` | `float [0,1]` | Histogram Shannon Entropy. `bins='auto'` utilizes Freedman-Diaconis rule. |
+| `calc_rolling_volume_entropy(volume, window, z_window)` | `np.ndarray`, `int=60`, `int=252` | `(shannon, sampen, global_z, rolling_z)` | Rolling wrapper implementing the dual-path Macro-Micro Fusion architecture. |
 
-**Ly do chon tham so**:
-- `bins='auto'`: Volume data co phan phoi heavy-tailed, `bins=10` se tao nhieu empty bins. Freedman-Diaconis tu dong dieu chinh.
-- `window=60`: SampEn voi m=2 can N >= 10^m = 100 ly tuong. 60 la muc toi thieu thuc te dam bao hoi tu.
-- `log1p(volume)`: On dinh hoa phan phoi, lam tolerance r tuong doi hon.
+**Parameter Justification**:
+- `bins='auto'`: Logarithmic volume distributions inherently possess heavy tails. Static bin constraints create empty subsets. The Freedman-Diaconis rule dynamically calibrates subset dispersion iteratively.
+- `window=60`: SampEn with $m=2$ ideally requires $N \geq 10^m = 100$. A 60-day window is the minimal viable baseline balancing statistical convergence with practical regime responsiveness.
+- **Macro-Micro Architecture**: Follows `log1p(volume)` transformation. Path A utilizes a Global Z-Score for absolute macro-scale systemic assessment. Path B computes a 252-day Rolling Z-score to eliminate structural break contamination. Entropy components (Shannon, SampEn) execute exclusively on Path B. SampEn tolerance $r$ revolves strictly at $0.2 \sigma$ since the rolling z-score vector already maintains unit variance.
 
 #### 3.2.3 Cross-Sectional Correlation Entropy (VN30)
 
-| Ham | Input | Output | Ghi chu |
+| Function | Input | Output | Notes |
 |---|---|---|---|
-| `calc_correlation_entropy(df_returns, window)` | `pd.DataFrame`, `int` | `pd.Series` 0-100 | EVD tren Pearson Correlation Matrix. |
+| `calc_correlation_entropy(df_returns, window)` | `pd.DataFrame`, `int` | `pd.Series` (0-100) | Executed via Eigenvalue Decomposition over the Pearson Correlation Matrix. |
 
 ---
 
 ### 3.3 `skills/ds_skill.py` -- Data Science / ML Layer (Dual GMM)
 
-**Trach nhiem**: Unsupervised Regime Classification cho **ca hai mat phang**.
+**Responsibility**: Unsupervised Regime Classification across **both dimensions entirely**.
 
 #### 3.3.1 Price Regime (Plane 1)
 
-| Component | Mo ta |
+| Component | Description |
 |---|---|
 | `REGIME_NAMES` | `{0: "Stable Growth", 1: "Fragile Growth", 2: "Chaos/Panic"}` |
-| `RegimeClassifier` | GMM `n_components=3`, `covariance_type='full'`. Mapping: sort by mean feature value. |
-| `fit_predict_regime(features)` | Functional API -> `(labels, classifier)` |
+| `RegimeClassifier` | GMM `n_components=3`, `covariance_type='full'`. Mapping rule: Sorting executed sequentially by mean algorithmic feature value. |
+| `fit_predict_regime(features)` | Functional API resolving -> `(labels, classifier)` |
 
 #### 3.3.2 Volume Regime (Plane 2)
 
-| Component | Mo ta |
+| Component | Description |
 |---|---|
 | `VOLUME_REGIME_NAMES` | `{0: "Consensus Flow", 1: "Dispersed Flow", 2: "Erratic/Noisy Flow"}` |
-| `VolumeRegimeClassifier` | GMM `n_components=3`, `covariance_type='full'`. Mapping: sort by sum(Shannon + SampEn). Thap = Consensus, Cao = Erratic. |
-| `fit_predict_volume_regime(features)` | Functional API -> `(labels, classifier)` |
+| `VolumeRegimeClassifier` | GMM `n_components=3`, `covariance_type='full'`. Mapping rule: Sorted recursively against sum(Shannon + SampEn). Lowest combined entropy translates to Consensus, while highest indicates Erratic variance. |
+| `fit_predict_volume_regime(features)` | Functional API resolving -> `(labels, classifier)` |
 
-**Ngu nghia Volume Regimes**:
-- **Consensus Flow**: Shannon thap + SampEn thap = Volume tap trung, deu dan. -> Institutional/Smart Money.
-- **Dispersed Flow**: Shannon cao + SampEn trung binh = Volume phan tan nhung khong bat quy luat.
-- **Erratic/Noisy Flow**: Shannon cao + SampEn cao = Volume vua phan tan vua bat quy luat. -> Retail/panic.
+**Volume Regime Semantics**:
+- **Consensus Flow**: Low Shannon + Low SampEn. Concentration is high, and impulses are highly regular. Indicative of institutional / Smart Money accumulation or distribution dynamics.
+- **Dispersed Flow**: High Shannon + Moderate SampEn. Transitional phase characterized by increasing participation divergence.
+- **Erratic/Noisy Flow**: High Shannon + High SampEn. Systemic volumetric variance coupled with irregularity. Defines retail fragmentation or catastrophic panic events.
 
 ---
 
 ### 3.4 `agent_orchestrator.py` -- Cross-Plane Reasoning Engine
 
-> **Disclaimer (Human-in-the-Loop):** The Agent is designed as a structural telemetry tool. It provides the "map" (Entropy states) and the "vehicle's dashboard" (Kinematic vectors V and a) to interpret complex market dynamics. However, the Agent is strictly an analytical observer. The final decision to act upon these conclusions rests entirely on human judgment and execution strategy.
+> **Disclaimer (Human-in-the-Loop):** The Agent is engineered exclusively as a structural telemetry diagnostic tool. It maps entropy states and kinematics vectors; however, the agent resolves its analytical synthesis autonomously. Any action based upon these analytical diagnostics naturally requires secondary human vetting matching current risk horizons.
 
-**Trach nhiem**: Trung tam dieu phoi Dual-Plane. Goi 5 tools lien tiep, tinh Kinematic Vectors, tong hop Cross-Plane Synthesis.
+**Responsibility**: Core Dual-Plane execution matrix. Manages iterative data sequencing through all 5 primary tools, synthesizes kinematic vectors against GMM regime classifications, and produces the unified Cross-Plane analytical report incorporating Macro-Micro Fusion heuristics.
 
-#### Tool Execution Order
+#### Tool Execution Framework
 
+```text
+[1] fetch_market_data      -> Extracts comprehensive OHLCV inputs
+[2] compute_entropy_metrics -> Calculates Plane 1 Physics (WPE, C, MFI, Volatility, V, a)
+[3] compute_volume_entropy  -> Calculates Plane 2 (Shannon, SampEn, Global Z, Rolling Z)
+[4] predict_market_regime   -> Instantiates Plane 1 GMM classifier output
+[5] predict_volume_regime   -> Instantiates Plane 2 GMM classifier output
+[6] Cross-Plane Synthesis   -> Executes unified diagnostic logic integrating Macro Z & Micro Entropy
 ```
-[1] fetch_market_data      -> OHLCV data
-[2] compute_entropy_metrics -> Plane 1 (WPE, C, MFI, Volatility, V, a)
-[3] compute_volume_entropy  -> Plane 2 (Shannon, SampEn)
-[4] predict_market_regime   -> Price Regime label
-[5] predict_volume_regime   -> Volume Regime label
-[6] Cross-Plane Synthesis   -> Unified conclusion
-```
 
-#### Cross-Plane Synthesis Matrix (trong code)
+#### Cross-Plane Synthesis Protocol (Source Implementation)
 
 ```python
-def _cross_plane_synthesis(price_regime, volume_regime):
-    if price_fragile_chaos and vol_consensus:
+def _cross_plane_synthesis(price_regime: str, volume_regime: str) -> tuple[str, str]:
+    # Logical heuristics expanding upon the matrix defined above
+    p = price_regime.upper()
+    v = volume_regime.upper()
+    
+    # ... Validation for chaos, stability, and consensus flags ...
+    
+    if p_fragile_chaos and v_consensus:
         return "STRUCTURAL ACCUMULATION"
-    elif price_fragile_chaos and vol_erratic:
-        return "CRITICAL BREAKDOWN"
-    elif price_stable and vol_erratic:
+    elif p_fragile_chaos and v_erratic:
+        return "CRITICAL BREAKDOWN" # Agent extends this evaluating Climax Distribution logic
+    elif p_stable and v_erratic:
         return "TREND EXHAUSTION"
     else:
         return "SYSTEM COHERENT"
 ```
 
-#### Diagnostic Output Format
+#### Standardized Diagnostic Output Blueprint
 
-```
-=========================================
-=========================================
+```text
+==================================================
+  DUAL-PLANE DIAGNOSTIC REPORT (MACRO-MICRO FUSION)
+==================================================
+
   PLANE 1 -- PRICE DYNAMICS
-=========================================
-REGIME DETECTED       : [FRAGILE GROWTH]
-WPE                   : 0.8745
-PE Velocity (V)       : +0.0312 (chaos expanding)
-PE Acceleration (a)   : -0.0045 (momentum fading)
-Market Fragility (MFI): 0.8612
+  REGIME          : [FRAGILE GROWTH]
+  MFI             : 0.8612
+  PE Velocity (V) : +0.0312 (chaos expanding)
+  PE Accel (a)    : -0.0045 (momentum fading)
 
-=========================================
-  PLANE 2 -- LIQUIDITY STRUCTURE
-=========================================
-REGIME DETECTED       : [CONSENSUS FLOW]
-Shannon Entropy       : 0.8234
-Sample Entropy        : 1.4521
+  PLANE 2 -- LIQUIDITY STRUCTURE (MACRO-MICRO FUSION)
+  MICRO REGIME    : [CONSENSUS FLOW]
+  Macro Z (Global): -0.45
+  Vol Shannon     : 0.8234
+  Vol SampEn      : 1.4521
 
-=========================================
   CROSS-PLANE SYNTHESIS
-=========================================
-SYNTHESIS             : [STRUCTURAL ACCUMULATION]
-SYSTEMIC RISK LEVEL   : [MODERATE]
+  CONCLUSION      : [STRUCTURAL ACCUMULATION]
+  SYSTEMIC RISK   : [MODERATE]
+
+  [Agent contextual rationale output follows...]
+==================================================
 ```
 
 ---
 
-## 4. Data Flow Pipeline (Dual-Plane)
+## 4. Operational Data Flow Pipeline
 
-```
-[1] User Query: "Phan tich VNINDEX voi Cross-Plane synthesis"
-                |
-[2] Orchestrator THINK: "Can 5 tools: data -> price entropy -> volume entropy -> 2 GMM"
-                |
+```text
+[1] Query Iteration: "Analyze VNINDEX with Cross-Plane synthesis. Is it structurally sound?"
+                 |
+[2] Orchestrator Evaluation: Requires sequential dispatch of data retrieval -> physics generation -> dual GMM analysis
+                 |
 [3] ACT: fetch_market_data(ticker="VNINDEX", start="2024-01-01")
-                |
-[4] ACT: compute_entropy_metrics()    -- Plane 1
-    ACT: compute_volume_entropy()     -- Plane 2
-                |
-[5] ACT: predict_market_regime()      -- GMM Plane 1
-    ACT: predict_volume_regime()      -- GMM Plane 2
-                |
-[6] SYNTHESIS: Cross-Plane Matrix
-    Price = "Fragile Growth" + Volume = "Consensus Flow"
-    -> Conclusion: "STRUCTURAL ACCUMULATION"
-                |
-[7] RESPOND: "VN-Index Price Plane dang o trang thai Fragile Growth (MFI=0.86).
-              Volume Plane xac nhan dong tien Consensus Flow (institutional).
-              Cross-Plane Synthesis: STRUCTURAL ACCUMULATION.
-              Chaos gia chi la be mat, thanh khoan van co cau truc."
+                 |
+[4] ACT: compute_entropy_metrics()    -- Solves Plane 1 matrices
+    ACT: compute_volume_entropy()     -- Solves Plane 2 Macro-Micro constraints
+                 |
+[5] ACT: predict_market_regime()      -- Extracts Plane 1 specific labels
+    ACT: predict_volume_regime()      -- Extracts Plane 2 specific labels
+                 |
+[6] LOGICAL SYNTHESIS: Macro-Micro Synthesis & Cross-Plane Matrix
+    e.g., Price ("Fragile Growth", V>0, a>0) + Volume ("Erratic Flow" @ Macro Z = +2.4)
+    -> Evaluated State: CLIMAX DISTRIBUTION 
+                 |
+[7] RESPONSIVE DISCONNECT: 
+    "The Dual-Plane Engine confirms CLIMAX DISTRIBUTION. While Plane 1 detects accelerating physical 
+    price chaos (V>0, a>0), Plane 2's Macro-Micro Fusion critically indicates that extreme systemic 
+    liquidity (Macro Z: +2.40) is currently operating under a fragmented micro-structural regime 
+    (Erratic/Noisy Flow). This divergence highlights a volatile distribution signature rather than 
+    accumulation. Systemic risk evaluates to CRITICAL."
 ```
 
 ---
 
-## 5. Cau truc Thu muc
+## 5. Repository Structure Architecture
 
-```
+```text
 Financial Entropy Agent/
-|-- agent_orchestrator.py       # Cross-Plane Reasoning Engine (5 tools + synthesis)
-|-- dashboard.py                # Streamlit UI: Dual scatter plots + agent diagnostic
-|-- architecture.md             # <<< File nay
+|-- agent_orchestrator.py       # Cross-Plane Reasoning Engine (React + Macro-Micro heuristics)
+|-- dashboard.py                # Streamlit UI: Realtime Dual Scatter charting & Agent output
+|-- architecture.md             # <<< Canonical Architectural Guide (this file)
+|-- README.md                   # Macro-theory and end-user documentation
 |-- skills/
-|   |-- data_skill.py           # Data ingestion (vnstock, yfinance, local file)
-|   |-- quant_skill.py          # WPE, MFI, Shannon, SampEn, Cross-Sectional Entropy
-|   |-- ds_skill.py             # Dual GMM: RegimeClassifier + VolumeRegimeClassifier
-|-- _reference_VSE/             # Codebase goc (Streamlit monolith) - READ ONLY
+|   |-- data_skill.py           # Ingestion layer (vnstock, yfinance, local normalization)
+|   |-- quant_skill.py          # Arithmetic & Physics: WPE, MFI, Shannon, SampEn, EVD
+|   |-- ds_skill.py             # Dual GMM instances: RegimeClassifier + VolumeRegimeClassifier
+|-- _reference_VSE/             # Legacy references (Streamlit monolithic codebase)
 |-- .agents/
-|   |-- workflows/              # Workflow definitions
+|   |-- workflows/              # Defined system behavior pathways
 ```
 
 ---
 
-## 6. Dependency Map
+## 6. System Dependency Topography
 
-| Package | Version | Module su dung | Muc dich |
+| Package | Version Baseline | Target Module | Functionality Baseline |
 |---|---|---|---|
-| `numpy` | >=1.24 | `quant_skill`, `ds_skill` | Vector operations, linear algebra |
-| `pandas` | >=2.0 | `data_skill`, `quant_skill`, `dashboard` | DataFrame manipulation |
-| `numba` | >=0.58 | `quant_skill` | JIT: WPE rolling, SampEn O(N^2) |
-| `vnstock` | >=2.0 | `data_skill` | Fetch VN-Index OHLCV |
-| `yfinance` | >=0.2 | `data_skill` | Fetch VN30 component prices |
-| `scikit-learn` | >=1.3 | `ds_skill` | GaussianMixture, StandardScaler |
-| `anthropic` | >=0.30 | `agent_orchestrator` | Claude API, Tool Use protocol |
-| `streamlit` | >=1.30 | `dashboard` | Web UI framework |
-| `plotly` | >=5.18 | `dashboard` | Interactive charts |
+| `numpy` | $\geq$ 1.24 | `quant_skill`, `ds_skill` | Array generation, vectorized math, and advanced linear algebra |
+| `pandas` | $\geq$ 2.0 | `data_skill`, `quant_skill`, `dashboard` | DataFrame standardization and index integrity |
+| `numba` | $\geq$ 0.58 | `quant_skill` | JIT acceleration (Mandatory for WPE rolling & $O(N^2)$ SampEn computation) |
+| `vnstock` | $\geq$ 2.0 | `data_skill` | Primary local entity for VN-Index OHLCV fetch mechanics |
+| `yfinance` | $\geq$ 0.2 | `data_skill` | Secondary resolution protocol (and VN30 component acquisition) |
+| `scikit-learn` | $\geq$ 1.3 | `ds_skill` | GaussianMixture protocols and robust StandardScaling structures |
+| `anthropic` | $\geq$ 0.30 | `agent_orchestrator` | Core AI reasoning protocols and Tool Use pipeline handling |
+| `streamlit` | $\geq$ 1.30 | `dashboard` | Local execution framework |
+| `plotly` | $\geq$ 5.18 | `dashboard` | Integrated high-fidelity graphing engines |
 
 ---
 
-## 7. Quy tac Phat trien (Dev Rules)
+## 7. Core Developer Logistics & Code Guidelines
 
-1. **KHONG BAO GIO** dinh nghia lai ham da ton tai trong mot skill khac. Luon `from skills.quant_skill import ...`.
-2. **Logic toan hoc** chi nam trong `quant_skill.py`. **ML models** chi nam trong `ds_skill.py`. Khong tron lan.
-3. Moi phep toan tren mang **PHAI** dung `numpy` vectorized. Chi dung loop khi khong the vectorize va phai danh dau `@numba.jit(nopython=True)`.
-4. **Type hints** bat buoc cho moi function signature. Docstring chi tap trung vao I/O va muc dich toan hoc.
-5. Moi file **PHAI** co `if __name__ == "__main__":` block de test doc lap.
-6. **Hai GMM classifier hoat dong doc lap**. Agent la diem duy nhat tong hop cheo.
+1. **NO RE-DEFINITIONS**: Functions maintaining quantitative value strictly remain in their canonical skill folders. Code reuse implies immediate import methodology (`from skills.quant_skill import ...`).
+2. **DOMAIN INTEGRITY**: Arithmetic arrays operate inside `quant_skill.py`. ML algorithms remain inside `ds_skill.py`.
+3. **VECTORIZATION PRIORITY**: Core system processing operates on `numpy` arrays. Standard algorithms must iterate efficiently without traditional loop protocols unless explicitly cached by `@numba.jit(nopython=True)`.
+4. **TYPE ADHERENCE**: Python strict type hinting validates standard function boundaries. Associated docstrings strictly cover inputs, outputs, and fundamental mathematical context.
+5. **VERIFIABILITY**: System execution necessitates that each module functions robustly standalone via an inner `if __name__ == "__main__":` validation loop.
+6. **PLANE SYMMETRY**: Regimes inherently track independently. The Agent mechanism exists purely to cross-synthesize states, it does not instruct algorithmic models.

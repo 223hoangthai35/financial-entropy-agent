@@ -106,14 +106,20 @@ def load_and_compute_data(start_date_str, end_date_str, file_bytes=None, file_na
     df["Complexity"] = c_arr
     df["MFI"] = mfi_arr
     
-    # 2b. Compute Volume Entropy Plane (Shannon + SampEn, window=60)
+    # 2b. Compute Volume Entropy Plane (Macro-Micro Fusion, window=60, z_window=252)
     if "Volume" in df.columns:
-        vol_shannon, vol_sampen = calc_rolling_volume_entropy(df["Volume"].values, window=60)
+        vol_shannon, vol_sampen, vol_global_z, vol_rolling_z = calc_rolling_volume_entropy(
+            df["Volume"].values, window=60, z_window=252
+        )
         df["Vol_Shannon"] = vol_shannon
         df["Vol_SampEn"] = vol_sampen
+        df["Vol_Global_Z"] = vol_global_z
+        df["Vol_Rolling_Z"] = vol_rolling_z
     else:
         df["Vol_Shannon"] = np.nan
         df["Vol_SampEn"] = np.nan
+        df["Vol_Global_Z"] = np.nan
+        df["Vol_Rolling_Z"] = np.nan
     
     # 2c. Kinematic Vectors: Velocity & Acceleration of PE (3-day momentum)
     df["PE_Velocity"] = df["WPE"].diff(3).fillna(0)
@@ -223,8 +229,10 @@ current_regime = str(latest["RegimeName"]).replace("nan", "Calculating...")
 current_vol_regime_name = str(latest.get("VolRegimeName", "N/A")).replace("nan", "Calculating...")
 kpi_vol_shannon = latest.get("Vol_Shannon", float("nan"))
 kpi_vol_sampen = latest.get("Vol_SampEn", float("nan"))
+kpi_vol_global_z = latest.get("Vol_Global_Z", float("nan"))
 vol_sh_kpi = f"{kpi_vol_shannon:.2f}" if pd.notna(kpi_vol_shannon) else "N/A"
 vol_se_kpi = f"{kpi_vol_sampen:.2f}" if pd.notna(kpi_vol_sampen) else "N/A"
+vol_gz_kpi = f"{kpi_vol_global_z:+.2f}" if pd.notna(kpi_vol_global_z) else "N/A"
 
 # Cross-Plane Synthesis (early compute for KPI header)
 _regime_upper = current_regime.upper()
@@ -248,7 +256,8 @@ with col1:
     st.metric(
         T("Index Price (Close)", "Chi so Gia (Close)"),
         f"{latest['Close']:,.2f}",
-        f"{latest['Close'] - prev['Close']:,.2f}"
+        f"{latest['Close'] - prev['Close']:,.2f}",
+        delta_color="off"
     )
 
 # --- Column 2: Plane 1 (Price Dynamics) ---
@@ -257,15 +266,16 @@ with col2:
     st.metric(
         T("Price Chaos (WPE)", "Hon loan Gia (WPE)"),
         f"{current_wpe:.4f}" if pd.notna(current_wpe) else "N/A",
-        f"V: {pe_v_sign} | {current_regime}"
+        f"V: {pe_v_sign} | {current_regime}",
+        delta_color="off"
     )
 
-# --- Column 3: Plane 2 (Liquidity Structure) ---
+# --- Column 3: Plane 2 (Liquidity Fusion) ---
 with col3:
     st.metric(
         T("Liquidity Regime", "Trang thai Thanh khoan"),
         current_vol_regime_name,
-        f"H: {vol_sh_kpi} | SE: {vol_se_kpi}",
+        f"Micro: H={vol_sh_kpi} SE={vol_se_kpi} | Macro Z: {vol_gz_kpi}",
         delta_color="off"
     )
 
@@ -279,49 +289,31 @@ with col4:
     )
 
 # ==============================================================================
-# ALL-IN-ONE INTEGRATED VISUALS (Plotly Subplots)
+# VISUALS: Dual-Plane Engine Tracking
 # ==============================================================================
 st.markdown("---")
-st.subheader(T("1. ALL-IN-ONE STRUCTURAL TELEMETRY", "1. ĐỒ THỊ CHỈ BÁO CẤU TRÚC (TELEMETRY)"))
+st.subheader(T("1. MARKET STRUCTURE", "1. CẤU TRÚC THỊ TRƯỜNG"))
 
-fig = make_subplots(
-    rows=2, cols=1, 
-    shared_xaxes=True,
-    vertical_spacing=0.15,
-    row_heights=[0.55, 0.45],
-    specs=[[{"secondary_y": True}], [{"secondary_y": False}]]
-)
+fig1 = make_subplots(specs=[[{"secondary_y": True}]])
 
-# Row 1: Candlestick + SMA20 (Primary Y)
-fig.add_trace(go.Candlestick(
+# Primary Y
+fig1.add_trace(go.Candlestick(
     x=df.index, open=df['Open'], high=df['High'], low=df['Low'], close=df['Close'],
-    name="Index Price", increasing_line_color='#FFFFFF', decreasing_line_color='#888888'
-), row=1, col=1, secondary_y=False)
+    name="VNindex", increasing_line_color='#FFFFFF', decreasing_line_color='#888888'
+), secondary_y=False)
 
-fig.add_trace(go.Scatter(
-    x=df.index, y=df['SMA20'], mode='lines', name='SMA 20',
+fig1.add_trace(go.Scatter(
+    x=df.index, y=df['SMA20'], mode='lines', name='SMA20',
     line=dict(color='yellow', width=1, dash='dash')
-), row=1, col=1, secondary_y=False)
+), secondary_y=False)
 
-# Row 1: Permutation Entropy WPE (Secondary Y) - Neon Orange
-fig.add_trace(go.Scatter(
+# Secondary Y
+fig1.add_trace(go.Scatter(
     x=df.index, y=df['WPE'], mode='lines', name='WPE (Entropy)',
-    line=dict(color='#FF5F1F', width=2)
-), row=1, col=1, secondary_y=True)
-
-# Row 2: VN30 Cross-Sectional Entropy (Cyan) + MFI
-fig.add_trace(go.Scatter(
-    x=df.index, y=df['Cross_Sectional_Entropy'], mode='lines', name='VN30 Cross-Sectional Entropy',
-    line=dict(color='#00FFFF', width=2), fill='tozeroy', fillcolor='rgba(0, 255, 255, 0.1)'
-), row=2, col=1)
-
-fig.add_trace(go.Scatter(
-    x=df.index, y=df['MFI'] * 100, mode='lines', name='MFI (Scaled)',
-    line=dict(color='#FFD700', width=1, dash='dot')
-), row=2, col=1)
+    line=dict(color='#FF5F1F', width=2), showlegend=False
+), secondary_y=True)
 
 # ADD REGIME BACKGROUND SHADING (vrects)
-# Map Regimes to colors
 regime_colors = {
     "Stable Growth": "rgba(0, 255, 65, 0.15)",     # Green
     "Fragile Growth": "rgba(255, 215, 0, 0.15)",   # Yellow
@@ -330,7 +322,11 @@ regime_colors = {
     "Calculating...": "rgba(128, 128, 128, 0)"
 }
 
-# Add shapes grouping contiguous regimes
+# Dummy traces for horizontal legend mapping
+fig1.add_trace(go.Scatter(x=[None], y=[None], mode='markers', marker=dict(symbol='square', size=10, color='rgba(0, 255, 65, 1)'), name='Stable Growth'))
+fig1.add_trace(go.Scatter(x=[None], y=[None], mode='markers', marker=dict(symbol='square', size=10, color='rgba(255, 215, 0, 1)'), name='Fragile Growth'))
+fig1.add_trace(go.Scatter(x=[None], y=[None], mode='markers', marker=dict(symbol='square', size=10, color='rgba(255, 0, 0, 1)'), name='Chaos/Panic'))
+
 df['Regime_Shift'] = df['RegimeName'] != df['RegimeName'].shift(1)
 shift_indices = df.index[df['Regime_Shift']].tolist()
 if len(shift_indices) > 0 and shift_indices[0] != df.index[0]:
@@ -344,27 +340,52 @@ for i in range(len(shift_indices) - 1):
     end_idx = shift_indices[i+1]
     regime = df.loc[start_idx, 'RegimeName']
     
-    # Check if regime is string
     if type(regime) == str:
         color = regime_colors.get(regime, "rgba(255,255,255,0)")
-        fig.add_vrect(
+        fig1.add_vrect(
             x0=start_idx, x1=end_idx,
             fillcolor=color, opacity=1.0,
-            layer="below", line_width=0,
-            row=1, col=1
+            layer="below", line_width=0
         )
 
-fig.update_layout(
-    template="plotly_dark", height=800, plot_bgcolor='#0E1117', paper_bgcolor='#0E1117',
-    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-    margin=dict(l=20, r=20, b=20, t=40)
+fig1.update_layout(
+    title=dict(text="VNindex Structure State", x=0.5, y=0.98, xanchor="center", yanchor="top"),
+    template="plotly_dark", height=550, plot_bgcolor='#0E1117', paper_bgcolor='#0E1117',
+    legend=dict(orientation="h", yanchor="top", y=1.08, xanchor="right", x=1.0),
+    margin=dict(l=20, r=20, b=20, t=60)
 )
-fig.update_xaxes(rangeslider_visible=False)
-fig.update_yaxes(title_text="Price", row=1, col=1, secondary_y=False)
-fig.update_yaxes(title_text="WPE", row=1, col=1, secondary_y=True)
-fig.update_yaxes(title_text="Entropy (0-100 Scale)", row=2, col=1)
+fig1.update_xaxes(rangeslider_visible=False)
+fig1.update_yaxes(title_text="Price", secondary_y=False, showgrid=True, gridcolor='rgba(255, 255, 255, 0.05)')
+fig1.update_yaxes(title_text="WPE", secondary_y=True, showgrid=False)
 
-st.plotly_chart(fig, use_container_width=True)
+st.plotly_chart(fig1, use_container_width=True)
+
+
+# --- Separated VN30 Chart ---
+st.markdown("---")
+
+fig2 = go.Figure()
+
+fig2.add_trace(go.Scatter(
+    x=df.index, y=df['Cross_Sectional_Entropy'], mode='lines', name='VN30 Cross-sectional entropy',
+    line=dict(color='#00FFFF', width=2), fill='tozeroy', fillcolor='rgba(0, 255, 255, 0.1)'
+))
+
+fig2.add_trace(go.Scatter(
+    x=df.index, y=df['MFI'] * 100, mode='lines', name='MFI',
+    line=dict(color='#FFD700', width=1, dash='dot')
+))
+
+fig2.update_layout(
+    title=dict(text="Cross-sectional Entropy VN30 (Eigenvalue Decomposition)", x=0.5, y=0.95, xanchor="center", yanchor="top"),
+    template="plotly_dark", height=400, plot_bgcolor='#0E1117', paper_bgcolor='#0E1117',
+    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1.0),
+    margin=dict(l=20, r=20, b=20, t=60),
+    yaxis=dict(title_text="Entropy (0-100 Scale)")
+)
+fig2.update_xaxes(rangeslider_visible=False)
+
+st.plotly_chart(fig2, use_container_width=True)
 
 # ==============================================================================
 # UNSUPERVISED LEARNING PROOF -- DUAL-PLANE
@@ -443,6 +464,7 @@ agent_regime = str(latest["RegimeName"]).upper()
 current_vol_regime = str(latest.get("VolRegimeName", "N/A")).upper()
 current_vol_shannon = latest.get("Vol_Shannon", float("nan"))
 current_vol_sampen = latest.get("Vol_SampEn", float("nan"))
+current_vol_global_z = latest.get("Vol_Global_Z", float("nan"))
 
 # Cross-Plane Synthesis Matrix
 price_is_fragile_chaos = "CHAOS" in agent_regime or "PANIC" in agent_regime or "FRAGILE" in agent_regime
@@ -469,6 +491,7 @@ global_risk = "CRITICAL" if cross_plane_label in ("CRITICAL BREAKDOWN",) else (
 
 vol_sh_str = f"{current_vol_shannon:.4f}" if pd.notna(current_vol_shannon) else "N/A"
 vol_se_str = f"{current_vol_sampen:.4f}" if pd.notna(current_vol_sampen) else "N/A"
+vol_gz_str = f"{current_vol_global_z:+.2f}" if pd.notna(current_vol_global_z) else "N/A"
 
 # VN30 analysis text
 if current_cse > 60:
@@ -497,7 +520,7 @@ agent_log = f"""
 | Telemetry Module | Key Metrics | Regime / Status |
 | :--- | :--- | :--- |
 | **Plane 1: Price Dynamics** | WPE: `{current_wpe:.4f}` -- V (dE/dt): `{pe_v_str}` -- a (d2E/dt2): `{pe_a_str}` | **{agent_regime}** |
-| **Plane 2: Liquidity Structure** | Shannon: `{vol_sh_str}` -- SampEn: `{vol_se_str}` | **{current_vol_regime}** |
+| **Plane 2: Liquidity Structure** | Macro Z: `{vol_gz_str}` -- Shannon: `{vol_sh_str}` -- SampEn: `{vol_se_str}` | **{current_vol_regime}** |
 | **Cross-Plane Synthesis** | Systemic Risk: `{global_risk}` | **{cross_plane_label}** |
 
 ### [ANALYSIS]

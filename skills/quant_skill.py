@@ -291,29 +291,53 @@ def calc_shannon_entropy_hist(
 
 
 # ==============================================================================
-# ROLLING VOLUME ENTROPY (SampEn + Shannon)
+# MACRO-MICRO FUSION: VOLUME ENTROPY PIPELINE
 # ==============================================================================
 def calc_rolling_volume_entropy(
-    volume: np.ndarray, window: int = 60,
-) -> tuple[np.ndarray, np.ndarray]:
+    volume: np.ndarray, window: int = 60, z_window: int = 252,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
-    Rolling SampEn + Shannon Entropy tren chuoi volume.
-    Volume duoc log-transform (log1p) truoc khi tinh de on dinh hoa
-    phan phoi heavy-tailed.
-    Window=60: SampEn voi m=2 can N >= 10^m = 100 ly tuong, 60 la
-    muc toi thieu thuc te dam bao hoi tu thong ke.
-    Returns: (shannon_arr, sampen_arr) -- cung shape voi input.
+    Macro-Micro Fusion Volume Entropy Pipeline.
+
+    Pipeline:
+      1. Base: log_vol = log1p(volume)
+      2. Path A (Macro): Vol_Global_Z = global z-score cua log_vol.
+         -> Do luong quy mo thanh khoan tuyet doi (macro inflow/drought).
+      3. Path B (Micro): Vol_Rolling_Z = rolling z-score (z_window ngay) cua log_vol.
+         -> Feed vao Entropy de phat hien hanh vi giao dich cuc bo,
+            khang structural break.
+      4. Shannon + SampEn tinh TREN Vol_Rolling_Z (KHONG phai Global Z).
+         SampEn tolerance r = 0.2 (co dinh, vi rolling z-score co unit variance).
+
+    Returns: (shannon_arr, sampen_arr, vol_global_z, vol_rolling_z).
     """
     vol = np.asarray(volume, dtype=np.float64)
     n = len(vol)
     shannon_out = np.full(n, np.nan)
     sampen_out = np.full(n, np.nan)
 
-    # Log-transform: xu ly heavy-tail va lam tolerance r tuong doi hon
+    # --- Base Transform ---
     log_vol = np.log1p(np.maximum(vol, 0.0))
 
+    # --- Path A: Macro Scale (Global Z-Score) ---
+    log_vol_series = pd.Series(log_vol)
+    global_mean = log_vol_series.mean()
+    global_std = log_vol_series.std()
+    if global_std > 0:
+        vol_global_z = ((log_vol_series - global_mean) / global_std).values
+    else:
+        vol_global_z = np.zeros(n)
+
+    # --- Path B: Micro Structure (Rolling Z-Score, z_window ngay) ---
+    rolling_mean = log_vol_series.rolling(z_window, min_periods=1).mean()
+    rolling_std = log_vol_series.rolling(z_window, min_periods=1).std()
+    # Tranh chia cho 0: thay std=0 bang NaN de skip
+    rolling_std = rolling_std.replace(0, np.nan)
+    vol_rolling_z = ((log_vol_series - rolling_mean) / rolling_std).values
+
+    # --- Entropy tren Micro Path (Vol_Rolling_Z) ---
     for i in range(window, n):
-        segment = log_vol[i - window: i]
+        segment = vol_rolling_z[i - window: i]
 
         # Loc NaN/Inf
         valid = segment[np.isfinite(segment)]
@@ -323,12 +347,10 @@ def calc_rolling_volume_entropy(
         # Shannon Entropy (bins='auto')
         shannon_out[i] = calc_shannon_entropy_hist(valid, bins="auto")
 
-        # Sample Entropy (m=2, r=0.2*std)
-        std_v = np.std(valid)
-        if std_v > 0.0:
-            sampen_out[i] = _calc_sample_entropy_jit(valid, 2, 0.2 * std_v)
+        # Sample Entropy (m=2, r=0.2 co dinh -- unit variance input)
+        sampen_out[i] = _calc_sample_entropy_jit(valid, 2, 0.2)
 
-    return shannon_out, sampen_out
+    return shannon_out, sampen_out, vol_global_z, vol_rolling_z
 
 
 # ==============================================================================
@@ -405,17 +427,23 @@ if __name__ == "__main__":
 
     print()
     print("=" * 60)
-    print("TEST 7: Rolling Volume Entropy (window=60)")
+    print("TEST 7: Macro-Micro Fusion Volume Entropy (window=60)")
     print("=" * 60)
     fake_volume = np.abs(np.random.randn(300)) * 1e6 + 5e5
-    sh_arr, se_arr = calc_rolling_volume_entropy(fake_volume, window=60)
-    print(f"  Input shape     : {fake_volume.shape}")
-    print(f"  Shannon shape   : {sh_arr.shape}")
-    print(f"  SampEn shape    : {se_arr.shape}")
-    print(f"  NaN count       : Shannon={np.isnan(sh_arr).sum()}, SampEn={np.isnan(se_arr).sum()}")
+    sh_arr, se_arr, gz_arr, rz_arr = calc_rolling_volume_entropy(fake_volume, window=60)
+    print(f"  Input shape       : {fake_volume.shape}")
+    print(f"  Shannon shape     : {sh_arr.shape}")
+    print(f"  SampEn shape      : {se_arr.shape}")
+    print(f"  Global Z shape    : {gz_arr.shape}")
+    print(f"  Rolling Z shape   : {rz_arr.shape}")
+    print(f"  NaN count         : Shannon={np.isnan(sh_arr).sum()}, SampEn={np.isnan(se_arr).sum()}")
     valid_sh = sh_arr[np.isfinite(sh_arr)]
     valid_se = se_arr[np.isfinite(se_arr)]
-    print(f"  Shannon range   : [{valid_sh.min():.4f}, {valid_sh.max():.4f}]")
-    print(f"  SampEn range    : [{valid_se.min():.4f}, {valid_se.max():.4f}]")
-    print(f"  Last 5 Shannon  : {sh_arr[-5:]}")
-    print(f"  Last 5 SampEn   : {se_arr[-5:]}")
+    valid_gz = gz_arr[np.isfinite(gz_arr)]
+    valid_rz = rz_arr[np.isfinite(rz_arr)]
+    print(f"  Shannon range     : [{valid_sh.min():.4f}, {valid_sh.max():.4f}]")
+    print(f"  SampEn range      : [{valid_se.min():.4f}, {valid_se.max():.4f}]")
+    print(f"  Global Z range    : [{valid_gz.min():.4f}, {valid_gz.max():.4f}]")
+    print(f"  Rolling Z range   : [{valid_rz.min():.4f}, {valid_rz.max():.4f}]")
+    print(f"  Last 5 Global Z   : {gz_arr[-5:]}")
+    print(f"  Last 5 Rolling Z  : {rz_arr[-5:]}")

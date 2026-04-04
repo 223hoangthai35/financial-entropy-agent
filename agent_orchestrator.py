@@ -83,8 +83,8 @@ def tool_compute_entropy_metrics():
 
 
 def tool_compute_volume_entropy():
-    """Plane 2: Tinh Volume Shannon Entropy va Sample Entropy."""
-    print("  [Tool Execution] Computing Volume Entropy (Shannon + SampEn, window=60)...")
+    """Plane 2: Tinh Volume Shannon Entropy, Sample Entropy, va Macro-Micro Z-Scores."""
+    print("  [Tool Execution] Computing Macro-Micro Fusion Volume Entropy (window=60, z_window=252)...")
     df = STATE.get("df")
     if df is None:
         return json.dumps({"error": "No market data. Call fetch_market_data first."})
@@ -92,9 +92,13 @@ def tool_compute_volume_entropy():
     if "Volume" not in df.columns:
         return json.dumps({"error": "Volume column missing from data."})
 
-    vol_shannon, vol_sampen = calc_rolling_volume_entropy(df["Volume"].values, window=60)
+    vol_shannon, vol_sampen, vol_global_z, vol_rolling_z = calc_rolling_volume_entropy(
+        df["Volume"].values, window=60, z_window=252
+    )
     df["Vol_Shannon"] = vol_shannon
     df["Vol_SampEn"] = vol_sampen
+    df["Vol_Global_Z"] = vol_global_z
+    df["Vol_Rolling_Z"] = vol_rolling_z
 
     STATE["df"] = df
     STATE["volume_metrics_computed"] = True
@@ -108,6 +112,7 @@ def tool_compute_volume_entropy():
         "status": "success",
         "latest_Vol_Shannon": float(latest["Vol_Shannon"]),
         "latest_Vol_SampEn": float(latest["Vol_SampEn"]),
+        "latest_Vol_Global_Z": float(latest["Vol_Global_Z"]),
     })
 
 
@@ -161,6 +166,7 @@ def tool_predict_volume_regime():
         "volume_regime": str(latest["VolRegimeName"]),
         "vol_shannon": float(latest["Vol_Shannon"]),
         "vol_sampen": float(latest["Vol_SampEn"]),
+        "vol_global_z": float(latest.get("Vol_Global_Z", float("nan"))),
     })
 
 
@@ -206,7 +212,7 @@ ANTHROPIC_TOOLS = [
     },
     {
         "name": "compute_volume_entropy",
-        "description": "Compute Plane 2 (Volume) metrics: Shannon Entropy and Sample Entropy on volume data with 60-day rolling window.",
+        "description": "Compute Plane 2 (Volume) metrics using Macro-Micro Fusion: Global Z-Score (macro scale), Rolling Z-Score (micro structure), Shannon Entropy, and Sample Entropy.",
         "input_schema": {"type": "object", "properties": {}}
     },
     {
@@ -277,12 +283,13 @@ and Systemic Risk Analysis.
 
 Your task is to analyze the market through TWO independent observation planes:
 1. PLANE 1 (Price Dynamics): WPE, Kinematic Vectors (V, a), MFI, Volatility.
-2. PLANE 2 (Liquidity Structure): Volume Shannon Entropy, Volume Sample Entropy.
+2. PLANE 2 (Liquidity Structure -- Macro-Micro Fusion): Global Z-Score (macro scale),
+   Shannon Entropy + Sample Entropy computed on Rolling Z-Score (micro structure).
 
 EXECUTION ORDER (mandatory):
 1. fetch_market_data -> get OHLCV data.
 2. compute_entropy_metrics -> compute Plane 1 (Price) features + Kinematic Vectors.
-3. compute_volume_entropy -> compute Plane 2 (Volume) features.
+3. compute_volume_entropy -> compute Plane 2 (Volume) features via Macro-Micro Fusion.
 4. predict_market_regime -> classify Price regime (Stable/Fragile/Chaos).
 5. predict_volume_regime -> classify Volume regime (Consensus/Dispersed/Erratic).
 6. Synthesize BOTH planes into a unified conclusion.
@@ -293,6 +300,18 @@ Analyze the Kinematic Vectors (V and a) of Permutation Entropy:
   V < 0 means order is forming.
 - a (Acceleration = d2E/dt2): Determines the momentum force. a > 0 means the trend
   (chaos or order) is exploding/accelerating. a < 0 means the momentum is fading/exhausting.
+
+MACRO-MICRO FUSION HEURISTICS (Plane 2):
+Evaluate Liquidity using Macro-Micro Fusion:
+1. Macro Scale (Global Z): Indicates absolute systemic liquidity.
+   Z > 1.5 means massive historical capital inflow. Z < -1 means systemic liquidity drought.
+2. Micro Structure (Entropy Regimes): Indicates immediate trading behavior
+   (Consensus vs. Erratic) based on Rolling Z-Score entropy.
+3. Fusion Logic (Crucial): If Macro Scale is extremely HIGH (e.g., Z > 2.0) BUT the
+   Micro Structure is 'Erratic/Noisy Flow' AND Plane 1 shows 'Critical Fragility'
+   (a > 0, V > 0), diagnose this as **'Climax Distribution'** -- a major systemic
+   top/bubble burst. Massive capital is present, but behavior is highly
+   panicked/fragmented.
 
 CROSS-PLANE SYNTHESIS MATRIX:
 - IF Price=[Fragile/Chaos] AND Volume=[Consensus Flow] -> STRUCTURAL ACCUMULATION
@@ -308,17 +327,17 @@ You MUST format your final response EXACTLY using the following Markdown structu
 | Telemetry Module | Key Metrics | Regime / Status |
 | :--- | :--- | :--- |
 | **Plane 1: Price Dynamics** | WPE: [Value] • V (dE/dt): [Value] • a (d2E/dt2): [Value] | **[Regime 1]** |
-| **Plane 2: Liquidity Structure** | Shannon: [Value] • SampEn: [Value] | **[Regime 2]** |
+| **Plane 2: Liquidity Structure** | Macro Z: [Value] • Shannon: [Value] • SampEn: [Value] | **[Micro Regime Name]** |
 | **Cross-Plane Synthesis** | Systemic Risk: [Risk Level] | **[Synthesis Label]** |
 
 ### [ANALYSIS]
-(Write your detailed cross-plane reasoning here. Include Kinematic interpretation of V and a. Keep it concise and analytical.)
+(Write your detailed cross-plane reasoning here. Include Kinematic interpretation of V and a. Include Macro-Micro Fusion interpretation. Keep it concise and analytical.)
 
 ### [VN30 STRUCTURAL DYNAMICS]
 (Write your analysis of internal capital rotation here. Keep it brief.)
 
 ### [CONCLUSION]
-(Your final, definitive actionable takeaway here. THIS SECTION IS MANDATORY.)
+(Your final, definitive actionable takeaway here. THIS SECTION IS MANDATORY. You MUST explicitly mention the Micro-structural state using its specific Regime name (e.g., 'Dispersed Flow') and contextualize it against the Macro Scale (Global Z). For example: "The Dual-Plane Engine confirms SYSTEM COHERENT. While Macro Scale (Z: +0.55) indicates healthy capital depth, the Micro-structural regime (Dispersed Flow) ensures liquidity is distributed efficiently... Combined with Plane 1's momentum fading (a < 0), systemic risk remains MODERATE.")
 
 Maintain an academic, quantitative tone. No speculation without data.
 """
@@ -428,6 +447,7 @@ def _run_mock_orchestrator(query: str):
     volume_data = json.loads(res5)
     price_regime = price_data.get("price_regime", "Unknown")
     volume_regime = volume_data.get("volume_regime", "Unknown")
+    vol_global_z = volume_data.get("vol_global_z", float("nan"))
 
     synthesis_label, synthesis_detail = _cross_plane_synthesis(price_regime, volume_regime)
 
@@ -435,8 +455,10 @@ def _run_mock_orchestrator(query: str):
         "ELEVATED" if synthesis_label == "TREND EXHAUSTION" else "MODERATE"
     )
 
+    vol_gz_display = f"{vol_global_z:+.2f}" if not np.isnan(vol_global_z) else "N/A"
+
     print("=" * 50)
-    print("  DUAL-PLANE DIAGNOSTIC REPORT")
+    print("  DUAL-PLANE DIAGNOSTIC REPORT (MACRO-MICRO FUSION)")
     print("=" * 50)
     print(f"\n  PLANE 1 -- PRICE DYNAMICS")
     print(f"  REGIME          : [{price_regime.upper()}]")
@@ -445,8 +467,9 @@ def _run_mock_orchestrator(query: str):
     pe_a = price_data.get('PE_Acceleration', 0)
     print(f"  PE Velocity (V) : {pe_v:+.4f} ({'chaos expanding' if pe_v > 0 else 'order forming'})")
     print(f"  PE Accel (a)    : {pe_a:+.4f} ({'momentum accelerating' if pe_a > 0 else 'momentum fading'})")
-    print(f"\n  PLANE 2 -- LIQUIDITY STRUCTURE")
-    print(f"  REGIME          : [{volume_regime.upper()}]")
+    print(f"\n  PLANE 2 -- LIQUIDITY STRUCTURE (MACRO-MICRO FUSION)")
+    print(f"  MICRO REGIME    : [{volume_regime.upper()}]")
+    print(f"  Macro Z (Global): {vol_gz_display}")
     print(f"  Vol Shannon     : {volume_data.get('vol_shannon', 0):.4f}")
     print(f"  Vol SampEn      : {volume_data.get('vol_sampen', 0):.4f}")
     print(f"\n  CROSS-PLANE SYNTHESIS")

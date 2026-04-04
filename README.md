@@ -12,8 +12,9 @@ The architecture observes the market through two lenses simultaneously:
 
 - **Plane 1 -- Price Dynamics**: Measures the *physical chaos* of price action via Weighted
   Permutation Entropy and Annualized Volatility.
-- **Plane 2 -- Liquidity Structure**: Measures the *structural integrity of capital flow* via
-  Volume Shannon Entropy and Volume Sample Entropy.
+- **Plane 2 -- Liquidity Structure (Macro-Micro Fusion)**: Fuses **Global Z-Scores** (to measure
+  absolute macro-scale systemic liquidity) with **Rolling Z-Scores + Entropy** (to measure
+  localized micro-structural trading behavior without structural break bias).
 
 An autonomous AI Agent (Anthropic Claude) acts as the **Cross-Plane Reasoning Engine**, synthesizing
 both planes to identify systemic conditions that are invisible from a single observation space --
@@ -28,42 +29,41 @@ prices.
 +-------------------------------------------------+
 |             agent_orchestrator.py               |
 |         Cross-Plane Reasoning Engine            |
-|       (ReAct Loop + Anthropic Tool Use)         |
+|       (Macro-Micro Fusion & ReAct Loop)         |
 +-------------------------------------------------+
          /                |                \
-        /                 |                 \
 +-------------+   +---------------+   +---------------+
 | data_skill  |   |  quant_skill  |   |   ds_skill    |
-|    .py      |   |      .py      |   |     .py       |
 +-------------+   +---------------+   +---------------+
-| vnstock     |   | WPE, MFI      |   | Price GMM     |
-| VN30 fetch  |   | Vol Shannon   |   | Volume GMM    |
-| Fallback    |   | Vol SampEn    |   | Regime Map    |
-+-------------+   +---------------+   +---------------+
-       |                  |                   |
-       v                  v                   v
- [Market Data]    [Entropy Metrics]     [Dual Labels]
-       |                  |                   |
-       +----------+-------+-------+-----------+
-                  |               |
-                  v               v
-        +=================+ +=================+
-        |     PLANE 1     | |     PLANE 2     |
-        | Price Dynamics  | |    Liquidity    |
-        | X: WPE          | | X: Shannon Ent  |
-        | Y: Volatility   | | Y: Sample Ent   |
-        | Physical Chaos  | | Liq. Structure  |
-        +=================+ +=================+
-                  \               /
-                   \             /
-                    v           v
+| Market Data |   | PE, V, a (P1) |   | GMM Clusters  |
+| VN30 fetch  |   | Vol Pipeline  |   | Regime Map    |
++-------------+   +-------+-------+   +---------------+
+          |               |                   |
+          |       [PLANE 1: PRICE]     [PLANE 2: VOLUME]
+          |       Physics Dynamics     Macro-Micro Fusion
+          |               |            /             \
+          v               v           v               v
+    [Index Data]    [WPE, V, a]   [Macro Z]   [Rolling Z + Ent]
+          |               |           |               |
+          |               |           |               |
+    +=====v===============v===+   +===v===============v=====+
+    |         PLANE 1         |   |         PLANE 2         |
+    |     Price Dynamics      |   |     Liquidity Space     |
+    +=========================+   +=========================+
+                  \                         /
+                   \                       /
              +=============================+
              |    CROSS-PLANE SYNTHESIS    |
-             |-----------------------------|
-             | Accumulation | Breakdown    |
-             | Exhaustion   | Coherent     |
+             | (Price Chaos + Liquidity F.) |
              +=============================+
 ```
+
+> **Macro-Micro Fusion (Plane 2):** Plane 2 utilizes a dual-path preprocessing architecture.
+> Raw volume is `log1p`-transformed, then split into: **(A) Global Z-Score** for absolute
+> macro-scale measurement (e.g., FDI inflows, systemic liquidity drought), and **(B) 252-day
+> Rolling Z-Score** which feeds the Shannon/SampEn entropy calculations. This ensures entropy
+> metrics capture localized trading behavior resistant to long-term structural breaks.
+
 
 | Observation Plane | X-Axis | Y-Axis | Measures |
 |---|---|---|---|
@@ -162,9 +162,9 @@ Where:
 | Parameter | Value | Justification |
 |---|---|---|
 | $m$ (Embedding Dimension) | **2** | Captures 2-day micro-structural patterns in volume impulses. Higher $m$ would require exponentially more data ($N \geq 10^m$) for convergence. |
-| $r$ (Tolerance) | **$0.2 \times \text{std}(x)$** | Standard threshold from physiological signal processing literature (Richman & Moorman, 2000). Proportional to standard deviation to be scale-invariant. |
+| $r$ (Tolerance) | **$0.2$** (fixed) | Since the input to SampEn is a **Rolling Z-Score** (unit variance by construction), the tolerance is fixed at $0.2$ standard deviations. This eliminates the need for adaptive `0.2 * std(x)` scaling. |
 | Window | **60 trading days** | Satisfies the convergence requirement $N \geq 10^m = 100$ at the practical minimum. 60 trading days (~3 calendar months) balances statistical reliability against responsiveness to regime shifts. |
-| Pre-processing | **$\log(1 + V)$ transform** | Financial volume data exhibits heavy-tailed distributions with extreme outliers (volume spikes). The `log1p` transform stabilizes the distribution and makes the tolerance parameter $r$ relatively more sensitive to structural changes rather than absolute magnitude. |
+| Pre-processing | **Rolling Z-Score of $\log(1 + V)$** | Raw volume is first `log1p`-transformed to stabilize heavy tails, then converted to a 252-day Rolling Z-Score. This ensures entropy measures capture *relative structural behavior* rather than absolute magnitude, and resists contamination from long-term structural breaks. |
 
 **Interpretation**:
 - **Low SampEn**: Volume impulses are regular and predictable -- characteristic of institutional,
