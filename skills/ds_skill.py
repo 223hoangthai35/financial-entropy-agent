@@ -1,7 +1,7 @@
 """
 Data Science / ML Layer -- Financial Entropy Agent
-Standardized Shock Space: PowerTransform + Tied-Covariance GMM Regime Classification.
-Plane 1 (Price): [WPE, Momentum_Entropy_Flux] -> PowerTransform -> Tied GMM -> Stable/Fragile/Chaos.
+Phase Space Regime Classification: PowerTransform + Full-Covariance GMM.
+Plane 1 (Price): [WPE, SPE_Z] -> PowerTransform -> Full GMM -> Stable/Fragile/Chaos.
 Plane 2 (Volume): [Shannon, SampEn] -> PowerTransform -> GMM -> Consensus/Dispersed/Erratic.
 """
 
@@ -10,6 +10,9 @@ import numpy as np
 from sklearn.mixture import GaussianMixture
 from sklearn.preprocessing import PowerTransformer
 from scipy.stats import normaltest
+
+# NOTE: PowerTransformer va normaltest van duoc import cho VolumeRegimeClassifier.
+# EntropyPhaseSpaceClassifier (Plane 1) KHONG dung PowerTransformer.
 
 logger = logging.getLogger(__name__)
 
@@ -25,27 +28,26 @@ REGIME_NAMES: dict[int, str] = {
 
 
 # ==============================================================================
-# STANDARDIZED SHOCK SPACE CLASSIFIER (PLANE 1: KINEMATIC)
+# ENTROPY PHASE SPACE CLASSIFIER (PLANE 1: [WPE, SPE_Z])
 # ==============================================================================
-class KinematicRegimeClassifier:
+class EntropyPhaseSpaceClassifier:
     """
-    Plane 1 GMM Classifier trong Standardized Shock Space.
+    Plane 1 GMM Classifier trong Raw Entropy Phase Space.
 
     Pipeline:
-        1. PowerTransformer(yeo-johnson) -> Gaussianize skewed [WPE, Flux]
-        2. D'Agostino normality test -> validate Gaussian assumption
-        3. GaussianMixture(n=3, covariance_type='tied', means_init along X)
-           -> 3 clusters CHIA CHUNG 1 ma tran hiep phuong sai.
-              Ngan chan 1 cluster ve ellipse khong lo boc quanh cluster khac.
-        4. Centroid sorting: argsort(means_[:, 0]) -> Stable/Fragile/Chaos.
+        1. Feed RAW [WPE, SPE_Z] truc tiep vao GMM (KHONG transform).
+        2. GaussianMixture(n=3, covariance_type='full')
+           -> Moi cluster co ma tran hiep phuong sai RIENG (2x2).
+              Full covariance tu dong xu ly scale khac nhau giua features.
+        3. Semantic sorting: sum of centroid means (WPE_mean + SPE_Z_mean).
+           Lowest combined entropy -> Stable, Mid -> Fragile, Highest -> Chaos.
 
-    Tai sao covariance_type='tied'?
-        Voi 'full', moi cluster co covariance rieng (2x2). Cluster co
-        variance Y lon se ve ellipse doc boc concentric quanh cluster khac.
-        Voi 'tied', ca 3 clusters chia chung 1 ma tran covariance duy nhat.
-        -> Moi cluster co CUNG hinh dang ellipse, chi khac vi tri centroid.
-        -> Ket hop voi means_init doc theo X-axis, GMM buoc phai cat
-           LEFT-TO-RIGHT thay vi tao topology concentric.
+    Tai sao KHONG dung PowerTransformer?
+        - WPE bounded [0, 1], SPE_Z la Z-score (mean~0, std~1).
+        - PowerTransform ep du lieu thanh Gaussian blob, pha huy
+          topological boundaries tu nhien cua entropy metrics.
+        - Full-covariance GMM du suc xu ly varying scales giua features.
+        - Giong cach Plane 2 (Volume) hoat dong: raw features -> GMM.
     """
 
     def __init__(
@@ -54,61 +56,35 @@ class KinematicRegimeClassifier:
         random_state: int = 42,
     ) -> None:
         self.n_components = n_components
-        self.power_tf = PowerTransformer(method="yeo-johnson", standardize=True)
-        # means_init: cam co doc truc X trong transformed space (mean~0, std~1)
-        self._means_init = np.array([[-1.5, 0.0], [0.0, 0.0], [1.5, 0.0]])
         self.gmm = GaussianMixture(
             n_components=n_components,
-            covariance_type="tied",  # 3 clusters chia chung 1 covariance matrix
-            means_init=self._means_init,
+            covariance_type="full",  # Moi cluster co covariance rieng
+            n_init=10,
             max_iter=500,
             random_state=random_state,
         )
         self._cluster_to_regime: dict[int, int] = {}
-        self.X_transformed: np.ndarray | None = None
-        self.normality_pvalue: float | None = None
+        self.X_fitted: np.ndarray | None = None
 
-    def fit(self, features: np.ndarray) -> "KinematicRegimeClassifier":
+    def fit(self, features: np.ndarray) -> "EntropyPhaseSpaceClassifier":
         """
-        Fit pipeline: PowerTransform -> Normality Test -> Tied GMM.
+        Fit Full GMM truc tiep tren raw [WPE, SPE_Z].
         """
-        # Step 1: PowerTransform
-        self.X_transformed = self.power_tf.fit_transform(features)
-
-        # Step 2: D'Agostino normality test tren WPE Shock axis
-        try:
-            stat, p_value = normaltest(self.X_transformed[:, 0])
-            self.normality_pvalue = float(p_value)
-            if p_value < 0.01:
-                logger.warning(
-                    f"Normality Test Warning: WPE Shock p-value = {p_value:.4e}. "
-                    f"Data might still have heavy tails after PowerTransform."
-                )
-            else:
-                logger.info(f"Normality Test Passed: WPE Shock p-value = {p_value:.4f}.")
-        except Exception:
-            self.normality_pvalue = None
-
-        # Step 3: Fit Tied GMM
-        self.gmm.fit(self.X_transformed)
-        self._map_clusters_by_centroid()
+        self.X_fitted = np.asarray(features, dtype=np.float64)
+        self.gmm.fit(self.X_fitted)
+        self._map_clusters_by_combined_entropy()
         return self
-
-    def transform(self, features: np.ndarray) -> np.ndarray:
-        """Transform raw features -> PowerTransformed space (for scatter plot)."""
-        return self.power_tf.transform(features)
 
     def predict(self, features: np.ndarray) -> np.ndarray:
         """Predict semantic regime labels (0=Stable, 1=Fragile, 2=Chaos)."""
-        X_tf = self.power_tf.transform(features)
-        raw_labels = self.gmm.predict(X_tf)
+        raw_labels = self.gmm.predict(features)
         mapped = np.array([self._cluster_to_regime.get(l, l) for l in raw_labels])
         return mapped
 
     def fit_predict(self, features: np.ndarray) -> np.ndarray:
         """Fit + predict trong 1 buoc."""
         self.fit(features)
-        raw_labels = self.gmm.predict(self.X_transformed)
+        raw_labels = self.gmm.predict(self.X_fitted)
         mapped = np.array([self._cluster_to_regime.get(l, l) for l in raw_labels])
         return mapped
 
@@ -118,19 +94,17 @@ class KinematicRegimeClassifier:
 
     def get_gmm_proba(self, features: np.ndarray) -> np.ndarray:
         """Soft GMM probabilities."""
-        X_tf = self.power_tf.transform(features)
-        return self.gmm.predict_proba(X_tf)
+        return self.gmm.predict_proba(features)
 
     def get_ellipse_params(self, cluster_idx: int, n_std: float = 2.0) -> dict:
         """
-        Tinh tham so ellipse (95% confidence) cho cluster trong transformed space.
-        Voi covariance_type='tied', gmm.covariances_ la 1 ma tran (2,2) duy nhat
-        dung chung cho ca 3 clusters. Moi cluster chi khac vi tri centroid.
+        Tinh tham so ellipse (95% confidence) cho cluster trong raw space.
+        Voi covariance_type='full', gmm.covariances_ la (n_components, n_features, n_features).
+        Moi cluster co ellipse RIENG voi hinh dang khac nhau.
         Returns: {"center": (cx, cy), "width": w, "height": h, "angle": theta_deg}
         """
         mean = self.gmm.means_[cluster_idx]
-        # 'tied' -> covariances_ la (n_features, n_features), KHONG phai (n_components, n_f, n_f)
-        cov = self.gmm.covariances_
+        cov = self.gmm.covariances_[cluster_idx]
 
         eigenvalues, eigenvectors = np.linalg.eigh(cov)
         order = eigenvalues.argsort()[::-1]
@@ -147,14 +121,15 @@ class KinematicRegimeClassifier:
             "angle": float(angle),
         }
 
-    def _map_clusters_by_centroid(self) -> None:
+    def _map_clusters_by_combined_entropy(self) -> None:
         """
         Map GMM cluster indices -> semantic regime labels (0,1,2)
-        dua tren sorted X-axis centroids.
-        Lowest mean X -> 0 (Stable), Middle -> 1 (Fragile), Highest -> 2 (Chaos).
+        dua tren tong cac centroid means (WPE_mean + SPE_Z_mean).
+        Lowest combined entropy -> 0 (Stable).
+        Highest combined entropy -> 2 (Chaos).
         """
-        means_x = self.gmm.means_[:, 0]
-        sorted_indices = np.argsort(means_x)
+        combined = self.gmm.means_.sum(axis=1)  # WPE + SPE_Z per cluster
+        sorted_indices = np.argsort(combined)
         self._cluster_to_regime = {
             int(sorted_indices[i]): i for i in range(self.n_components)
         }
@@ -166,14 +141,14 @@ class KinematicRegimeClassifier:
 def fit_predict_regime(
     features: np.ndarray,
     n_components: int = 3,
-) -> tuple[np.ndarray, KinematicRegimeClassifier]:
+) -> tuple[np.ndarray, EntropyPhaseSpaceClassifier]:
     """
-    Ham tien ich: tao KinematicRegimeClassifier, fit va predict.
-    Input:  features (N x 2 array: [WPE, Momentum_Entropy_Flux])
+    Ham tien ich: tao EntropyPhaseSpaceClassifier, fit va predict.
+    Input:  features (N x 2 array: [WPE, SPE_Z])
     Output: (labels, fitted_classifier)
-    Labels duoc quyet dinh boi Tied GMM trong Standardized Shock Space.
+    Labels duoc quyet dinh boi Full GMM trong Entropy Phase Space.
     """
-    clf = KinematicRegimeClassifier(n_components=n_components)
+    clf = EntropyPhaseSpaceClassifier(n_components=n_components)
     labels = clf.fit_predict(features)
     return labels, clf
 
@@ -272,47 +247,43 @@ if __name__ == "__main__":
     np.random.seed(42)
 
     print("=" * 60)
-    print("TEST 1: Plane 1 -- Standardized Shock Space (Tied GMM)")
+    print("TEST 1: Plane 1 -- Raw Entropy Phase Space (Full GMM, NO transform)")
     print("=" * 60)
 
-    # Tao 3 cum gia lap voi phan phoi skewed (realistic WPE)
+    # Tao 3 cum gia lap: WPE (X, [0,1]) va SPE_Z (Y, z-score)
     stable = np.column_stack([
-        np.random.beta(5, 8, 300) * 0.3 + 0.3,   # ~0.3-0.6 (left-skewed)
-        np.random.randn(300) * 0.5                 # Low flux
+        np.random.beta(5, 8, 300) * 0.3 + 0.3,   # WPE ~0.3-0.6
+        np.random.randn(300) * 0.4 - 0.8          # SPE_Z low (near -1)
     ])
     fragile = np.column_stack([
-        np.random.beta(5, 5, 200) * 0.2 + 0.6,    # ~0.6-0.8
-        np.random.randn(200) * 1.5                 # Medium flux
+        np.random.beta(5, 5, 200) * 0.2 + 0.6,    # WPE ~0.6-0.8
+        np.random.randn(200) * 0.5                 # SPE_Z mid (near 0)
     ])
     chaos = np.column_stack([
-        np.random.beta(8, 3, 100) * 0.15 + 0.82,  # ~0.82-0.97
-        np.random.randn(100) * 3.0                 # High flux
+        np.random.beta(8, 3, 100) * 0.15 + 0.82,  # WPE ~0.82-0.97
+        np.random.randn(100) * 0.6 + 0.8           # SPE_Z high (near +1)
     ])
 
     fake_features = np.vstack([stable, fragile, chaos])
     print(f"  Feature matrix shape : {fake_features.shape}")
-    print(f"  Columns semantics    : [WPE, Momentum_Entropy_Flux]")
+    print(f"  Columns semantics    : [WPE (raw, [0,1]), SPE_Z (raw, z-score)]")
 
     labels, clf = fit_predict_regime(fake_features, n_components=3)
 
-    print(f"\n  Normality test p-value (WPE Shock): {clf.normality_pvalue:.4f}")
-    print(f"  GMM covariance_type: {clf.gmm.covariance_type}")
-    print(f"  Shared covariance matrix:")
-    print(f"    {clf.gmm.covariances_}")
+    print(f"\n  GMM covariance_type  : {clf.gmm.covariance_type}")
+    print(f"  PowerTransformer     : NONE (raw features)")
 
-    print(f"\n  GMM Centroids (Transformed Shock Space):")
+    print(f"\n  GMM Centroids (Raw Phase Space):")
     for i in range(3):
         regime_idx = clf._cluster_to_regime.get(i, i)
         name = clf.get_regime_name(regime_idx)
         mean = clf.gmm.means_[i]
-        print(f"    Cluster {i} -> {name:15s} : X={mean[0]:+.3f}, Y={mean[1]:+.3f}")
+        combined = mean.sum()
+        print(f"    Cluster {i} -> {name:15s} : WPE={mean[0]:.3f}, SPE_Z={mean[1]:+.3f}, sum={combined:+.3f}")
 
-    print(f"\n  Left-to-Right check:")
-    x_means = clf.gmm.means_[:, 0]
-    sorted_x = np.sort(x_means)
-    is_monotonic = all(sorted_x[i] < sorted_x[i+1] for i in range(len(sorted_x)-1))
-    print(f"    Sorted X: {[f'{x:+.3f}' for x in sorted_x]}")
-    print(f"    Monotonically increasing: {is_monotonic}")
+    print(f"\n  Combined-entropy sorting check:")
+    combined_scores = clf.gmm.means_.sum(axis=1)
+    print(f"    Combined scores: {[f'{s:+.3f}' for s in combined_scores]}")
 
     print(f"\n  Predicted labels     : {np.unique(labels)}")
     print(f"  Label distribution   :")
@@ -321,13 +292,13 @@ if __name__ == "__main__":
         count = (labels == lbl).sum()
         print(f"    {lbl} -> {name:25s} (n={count})")
 
-    # Ellipse params (shared shape, different centers)
-    print(f"\n  95% Confidence Ellipses (TIED = same shape, different center):")
+    # Ellipse params (full covariance in RAW space)
+    print(f"\n  95% Confidence Ellipses (FULL, RAW space):")
     for i in range(3):
         e = clf.get_ellipse_params(i, n_std=2.0)
         regime_idx = clf._cluster_to_regime.get(i, i)
         name = clf.get_regime_name(regime_idx)
-        print(f"    {name:15s}: center=({e['center'][0]:+.2f},{e['center'][1]:+.2f}), w={e['width']:.2f}, h={e['height']:.2f}, angle={e['angle']:.1f}")
+        print(f"    {name:15s}: center=({e['center'][0]:.3f},{e['center'][1]:+.3f}), w={e['width']:.3f}, h={e['height']:.3f}, angle={e['angle']:.1f}")
 
     print()
     print("=" * 60)

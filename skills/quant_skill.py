@@ -1,7 +1,8 @@
 """
 Quantitative Physics Engine -- Financial Entropy Agent
 WPE, Statistical Complexity, MFI, Cross-Sectional Entropy,
-Volume Entropy (Shannon, SampEn).
+Volume Entropy (Shannon, SampEn), Price Sample Entropy (SPE_Z),
+WPE Kinematics (V_WPE, a_WPE) for XAI trajectory indicators.
 Toi uu bang @numba.njit va numpy vectorized.
 """
 
@@ -354,24 +355,22 @@ def calc_rolling_volume_entropy(
 
 
 # ==============================================================================
-# KINEMATIC MOMENTUM ENTROPY FLUX
+# WPE KINEMATICS (DECOUPLED -- XAI TRAJECTORY INDICATORS ONLY)
 # ==============================================================================
-def calc_momentum_entropy_flux(
+def calc_wpe_kinematics(
     wpe: np.ndarray,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray]:
     """
-    Kinematic Momentum Entropy Flux (%).
-    V = Delta(WPE) (Velocity of entropy change).
-    a = Delta(V) (Acceleration of entropy change).
-    Flux = sign(V) * sqrt(V^2 + a^2) * 100 -> percentage fluctuation metric.
-    Returns: (velocity, acceleration, momentum_flux_pct)
+    Kinematic descriptors of WPE trajectory (XAI only, NOT used in ML).
+    V_WPE = Delta(WPE) (Velocity of entropy change).
+    a_WPE = Delta(V) (Acceleration of entropy change).
+    Returns: (velocity, acceleration)
     """
     wpe = np.asarray(wpe, dtype=np.float64)
     n = len(wpe)
 
     velocity = np.full(n, np.nan)
     acceleration = np.full(n, np.nan)
-    momentum_flux = np.full(n, np.nan)
 
     # V = WPE(t) - WPE(t-1)
     velocity[1:] = np.diff(wpe)
@@ -380,19 +379,58 @@ def calc_momentum_entropy_flux(
     valid_v = velocity.copy()
     acceleration[2:] = np.diff(valid_v[1:])
 
-    # Flux = sign(V) * sqrt(V^2 + a^2) * 100
-    v = velocity
-    a = acceleration
-    magnitude = np.sqrt(np.where(np.isnan(v), 0, v) ** 2 +
-                        np.where(np.isnan(a), 0, a) ** 2)
-    sign_v = np.sign(np.where(np.isnan(v), 0, v))
-    momentum_flux = sign_v * magnitude * 100.0
+    return velocity, acceleration
 
-    # Giu NaN cho cac diem dau khong co du du lieu
-    momentum_flux[0] = np.nan
-    momentum_flux[1] = np.nan
 
-    return velocity, acceleration, momentum_flux
+# ==============================================================================
+# PRICE SAMPLE ENTROPY (SPE_Z) -- PLANE 1 Y-AXIS
+# ==============================================================================
+def calc_rolling_price_sample_entropy(
+    close_prices: np.ndarray,
+    window: int = 60,
+    m: int = 2,
+    r_factor: float = 0.2,
+) -> np.ndarray:
+    """
+    Rolling Sample Entropy tren close prices (KHONG phai log-returns).
+    r = r_factor * std(window). Dung de do do phuc tap cua quy dao gia.
+    Returns: sampen_array (cung shape voi input, NaN cho cac diem dau).
+    """
+    prices = np.asarray(close_prices, dtype=np.float64)
+    n = len(prices)
+    sampen_out = np.full(n, np.nan)
+
+    for i in range(window, n):
+        segment = prices[i - window: i]
+        valid = segment[np.isfinite(segment)]
+        if len(valid) < m + 2:
+            continue
+        std_val = np.std(valid)
+        if std_val == 0.0:
+            continue
+        r = r_factor * std_val
+        sampen_out[i] = _calc_sample_entropy_jit(valid, m, r)
+
+    return sampen_out
+
+
+def calc_spe_z(sampen_arr: np.ndarray) -> np.ndarray:
+    """
+    Global Z-Score normalization cua Price Sample Entropy.
+    SPE_Z = (SampEn - mean) / std. Chuan hoa toan cuc de tao
+    orthogonal axis voi WPE trong Phase Space.
+    Returns: spe_z_array (NaN-safe).
+    """
+    arr = np.asarray(sampen_arr, dtype=np.float64)
+    valid = arr[np.isfinite(arr)]
+    if len(valid) < 2:
+        return np.full_like(arr, np.nan)
+    mu = np.mean(valid)
+    sigma = np.std(valid)
+    if sigma == 0.0:
+        return np.full_like(arr, 0.0)
+    spe_z = np.where(np.isfinite(arr), (arr - mu) / sigma, np.nan)
+    return spe_z
 
 
 # ==============================================================================
@@ -412,26 +450,39 @@ if __name__ == "__main__":
     print(f"  MFI    = {mfi:.6f}")
 
     print("\n" + "=" * 60)
-    print("TEST 2: Momentum Entropy Flux (Kinematic)")
+    print("TEST 2: WPE Kinematics (XAI Trajectory Indicators)")
     print("=" * 60)
     test_wpe = np.array([0.50, 0.52, 0.55, 0.60, 0.58, 0.55, 0.50, 0.48, 0.52, 0.56])
-    vel, acc, flux = calc_momentum_entropy_flux(test_wpe)
-    print(f"  WPE Input   : {test_wpe}")
-    print(f"  Velocity    : {np.round(vel, 5)}")
-    print(f"  Acceleration: {np.round(acc, 5)}")
-    print(f"  Flux (%)    : {np.round(flux, 3)}")
+    vel, acc = calc_wpe_kinematics(test_wpe)
+    print(f"  WPE Input      : {test_wpe}")
+    print(f"  V_WPE          : {np.round(vel, 5)}")
+    print(f"  a_WPE          : {np.round(acc, 5)}")
 
     print("\n" + "=" * 60)
-    print("TEST 3: Rolling WPE -> Momentum Flux Pipeline")
+    print("TEST 3: Price Sample Entropy (SPE_Z)")
+    print("=" * 60)
+    fake_prices = np.cumsum(np.random.randn(200) * 2.0) + 1200
+    sampen_price = calc_rolling_price_sample_entropy(fake_prices, window=60)
+    spe_z = calc_spe_z(sampen_price)
+    valid_spe = spe_z[np.isfinite(spe_z)]
+    print(f"  Price points       : {len(fake_prices)}")
+    print(f"  Valid SPE_Z points : {len(valid_spe)}")
+    if len(valid_spe) > 0:
+        print(f"  SPE_Z range        : [{np.min(valid_spe):.3f}, {np.max(valid_spe):.3f}]")
+        print(f"  SPE_Z mean         : {np.mean(valid_spe):.3f}")
+        print(f"  SPE_Z std          : {np.std(valid_spe):.3f}")
+
+    print("\n" + "=" * 60)
+    print("TEST 4: Rolling WPE -> Kinematics Pipeline")
     print("=" * 60)
     log_rets = np.random.randn(200) * 0.01
     wpe_arr, c_arr = calc_rolling_wpe(log_rets, m=3, tau=1, window=22)
     valid_wpe = wpe_arr[~np.isnan(wpe_arr)]
     if len(valid_wpe) > 5:
-        v, a, f_pct = calc_momentum_entropy_flux(valid_wpe)
+        v, a = calc_wpe_kinematics(valid_wpe)
         print(f"  Valid WPE points : {len(valid_wpe)}")
-        print(f"  Flux range       : [{np.nanmin(f_pct):.3f}%, {np.nanmax(f_pct):.3f}%]")
-        print(f"  Flux mean        : {np.nanmean(f_pct):.3f}%")
+        print(f"  V_WPE range      : [{np.nanmin(v):.5f}, {np.nanmax(v):.5f}]")
+        print(f"  a_WPE range      : [{np.nanmin(a):.5f}, {np.nanmax(a):.5f}]")
     else:
         print("  Khong du du lieu WPE.")
 

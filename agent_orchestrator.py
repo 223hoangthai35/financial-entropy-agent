@@ -2,6 +2,7 @@
 Agent Orchestrator -- Financial Entropy Agent (Tri-Vector Composite Risk Engine)
 ReAct Loop + Anthropic Tool Use Protocol.
 Composite Risk = 0.4*V1(Price) + 0.4*V2(Volume) + 0.2*V3(VN30 Breadth).
+V1 = [WPE, SPE_Z]. Kinematics (V_WPE, a_WPE) = XAI only.
 """
 
 import os
@@ -14,7 +15,8 @@ import anthropic
 from skills.data_skill import get_latest_market_data, fetch_vn30_returns
 from skills.quant_skill import (
     calc_rolling_wpe, calc_mfi, calc_rolling_volume_entropy,
-    calc_correlation_entropy, calc_momentum_entropy_flux,
+    calc_correlation_entropy, calc_wpe_kinematics,
+    calc_rolling_price_sample_entropy, calc_spe_z,
 )
 from skills.ds_skill import fit_predict_regime, fit_predict_volume_regime
 
@@ -58,7 +60,7 @@ def calc_composite_risk_score(
 
     # --- 1. Extract raw features ---
     wpe = float(latest.get("WPE", 0.5))
-    momentum_flux = float(latest.get("Momentum_Entropy_Flux", 0.0))
+    spe_z = float(latest.get("SPE_Z", 0.0))
     vol_sampen = float(latest.get("Vol_SampEn", 0.5))
     vol_global_z = float(latest.get("Vol_Global_Z", 0.0))
     vol_shannon = float(latest.get("Vol_Shannon", 0.5))
@@ -66,7 +68,7 @@ def calc_composite_risk_score(
     mfi = float(latest.get("MFI", 0.5))
 
     # Current day feature arrays
-    v1_current = np.array([[wpe, abs(momentum_flux) / 100.0]])           # (1, 2)
+    v1_current = np.array([[wpe, abs(spe_z)]])                             # (1, 2)
     v2_current = np.array([[vol_sampen, abs(vol_global_z), vol_shannon]]) # (1, 3)
     v3_current = np.array([[corr_entropy, mfi]])                          # (1, 2)
 
@@ -80,11 +82,11 @@ def calc_composite_risk_score(
         hist = df.tail(ROLLING_RISK_WINDOW).copy()
         n_hist = len(hist)
 
-        # V1 history: [WPE, |Flux|/100]
+        # V1 history: [WPE, |SPE_Z|]
         v1_hist = np.column_stack([
             hist["WPE"].fillna(0.5).values,
-            (hist["Momentum_Entropy_Flux"].abs().fillna(0.0).values / 100.0
-             if "Momentum_Entropy_Flux" in hist.columns
+            (hist["SPE_Z"].abs().fillna(0.0).values
+             if "SPE_Z" in hist.columns
              else np.zeros(n_hist)),
         ])
 
@@ -145,9 +147,20 @@ def calc_composite_risk_score(
         s_v2 = float(np.clip(vol_sampen, 0, 1))
         s_v3 = float(np.clip(corr_entropy, 0, 1))
 
-    # --- 6. Weighted composite ---
-    composite = (0.4 * s_v1) + (0.4 * s_v2) + (0.2 * s_v3)
-    composite_score = float(np.clip(composite * 100.0, 0.0, 100.0))
+    # --- 6. Weighted composite and XAI Contributions ---
+    weight_v1_score = 0.4 * s_v1
+    weight_v2_score = 0.4 * s_v2
+    weight_v3_score = 0.2 * s_v3
+    total_weight = weight_v1_score + weight_v2_score + weight_v3_score
+    
+    composite_score = float(np.clip(total_weight * 100.0, 0.0, 100.0))
+
+    if total_weight > 0:
+        contrib_v1_pct = (weight_v1_score / total_weight) * 100.0
+        contrib_v2_pct = (weight_v2_score / total_weight) * 100.0
+        contrib_v3_pct = (weight_v3_score / total_weight) * 100.0
+    else:
+        contrib_v1_pct, contrib_v2_pct, contrib_v3_pct = 0.0, 0.0, 0.0
 
     # --- 7. Dynamic risk label ---
     if composite_score >= critical_bound:
@@ -170,6 +183,11 @@ def calc_composite_risk_score(
         "risk_label": risk_label,
         "dominant_vector": dominant,
         "contributions": contributions,
+        "contribution_percentages": {
+            "V1_Price": round(contrib_v1_pct, 2),
+            "V2_Volume": round(contrib_v2_pct, 2),
+            "V3_Breadth": round(contrib_v3_pct, 2),
+        },
         "weights": {"V1": 0.4, "V2": 0.4, "V3": 0.2},
         "thresholds": {
             "elevated_bound": round(elevated_bound, 1),
@@ -199,8 +217,8 @@ def tool_fetch_market_data(ticker="VNINDEX", start_date="2020-01-01"):
 
 
 def tool_compute_entropy_metrics():
-    """Plane 1: WPE, MFI, Momentum_Entropy_Flux. Stateless (no cache)."""
-    print("  [Tool Execution] Computing Price Entropy + Kinematic Flux...")
+    """Plane 1: WPE, MFI, SPE_Z, V_WPE, a_WPE (XAI kinematics)."""
+    print("  [Tool Execution] Computing Price Entropy + SPE_Z + Kinematics...")
     df = STATE.get("df")
     if df is None:
         return json.dumps({"error": "No market data. Call fetch_market_data first."})
@@ -214,13 +232,18 @@ def tool_compute_entropy_metrics():
     df["Complexity"] = c_arr
     df["MFI"] = mfi_arr
 
-    # 2. Kinematic Momentum Entropy Flux
-    vel, acc, flux = calc_momentum_entropy_flux(wpe_arr)
-    df["PE_Velocity"] = vel
-    df["PE_Acceleration"] = acc
-    df["Momentum_Entropy_Flux"] = flux
+    # 2. Price Sample Entropy (SPE_Z) -- Plane 1 Y-axis
+    sampen_price = calc_rolling_price_sample_entropy(df["Close"].values, window=60)
+    spe_z = calc_spe_z(sampen_price)
+    df["Price_SampEn"] = sampen_price
+    df["SPE_Z"] = spe_z
 
-    # 3. VN30 Breadth (Cross-Sectional Entropy)
+    # 3. WPE Kinematics (XAI trajectory indicators -- NOT used in ML)
+    vel, acc = calc_wpe_kinematics(wpe_arr)
+    df["V_WPE"] = vel
+    df["a_WPE"] = acc
+
+    # 4. VN30 Breadth (Cross-Sectional Entropy)
     try:
         vn30_rets = fetch_vn30_returns(start_date=df.index.min().strftime('%Y-%m-%d'))
         vn30_rets = vn30_rets.reindex(df.index).fillna(0)
@@ -239,9 +262,9 @@ def tool_compute_entropy_metrics():
         "latest_metrics": {
             "WPE": float(latest["WPE"]),
             "MFI": float(latest["MFI"]),
-            "Momentum_Entropy_Flux": float(latest.get("Momentum_Entropy_Flux", 0)),
-            "PE_Velocity": float(latest.get("PE_Velocity", 0)),
-            "PE_Acceleration": float(latest.get("PE_Acceleration", 0)),
+            "SPE_Z": float(latest.get("SPE_Z", 0)),
+            "V_WPE": float(latest.get("V_WPE", 0)),
+            "a_WPE": float(latest.get("a_WPE", 0)),
             "Cross_Sectional_Entropy": float(latest.get("Cross_Sectional_Entropy", 50.0)),
         }
     })
@@ -284,17 +307,17 @@ def tool_compute_volume_entropy():
 
 
 def tool_predict_market_regime():
-    """Plane 1: Tied GMM Topological Slicing -> Price Regime."""
-    print("  [Tool Execution] Predicting Price Regime (Tied GMM, Plane 1)...")
+    """Plane 1: Full GMM Phase Space -> Price Regime [WPE, SPE_Z]."""
+    print("  [Tool Execution] Predicting Price Regime (Full GMM, Plane 1: [WPE, SPE_Z])...")
     df = STATE.get("df")
     if df is None or not STATE.get("metrics_computed"):
         return json.dumps({"error": "Price metrics missing. Compute entropy first."})
 
-    valid_df = df.dropna(subset=["WPE", "Momentum_Entropy_Flux"]).copy()
+    valid_df = df.dropna(subset=["WPE", "SPE_Z"]).copy()
     if valid_df.empty:
-        return json.dumps({"error": "No valid WPE+Flux data."})
+        return json.dumps({"error": "No valid WPE+SPE_Z data."})
 
-    features = valid_df[["WPE", "Momentum_Entropy_Flux"]].values
+    features = valid_df[["WPE", "SPE_Z"]].values
     labels, clf = fit_predict_regime(features, n_components=3)
     valid_df["RegimeLabel"] = labels
     valid_df["RegimeName"] = [clf.get_regime_name(lbl) for lbl in labels]
@@ -307,6 +330,10 @@ def tool_predict_market_regime():
         "status": "success",
         "price_regime": str(latest["RegimeName"]),
         "mfi": float(latest["MFI"]),
+        "xai_trajectory": {
+            "V_WPE": float(latest.get("V_WPE", 0)),
+            "a_WPE": float(latest.get("a_WPE", 0)),
+        }
     })
 
 
@@ -376,7 +403,7 @@ ANTHROPIC_TOOLS = [
     },
     {
         "name": "compute_entropy_metrics",
-        "description": "Compute Plane 1 (Price) metrics: WPE, MFI, Momentum Entropy Flux (kinematic velocity and acceleration of entropy).",
+        "description": "Compute Plane 1 (Price) metrics: WPE, SPE_Z (Price Sample Entropy), MFI, and XAI trajectory indicators (V_WPE, a_WPE kinematics).",
         "input_schema": {"type": "object", "properties": {}}
     },
     {
@@ -386,7 +413,7 @@ ANTHROPIC_TOOLS = [
     },
     {
         "name": "predict_market_regime",
-        "description": "Classify Price regime via Tied-Covariance GMM Topological Slicing in Standardized Shock Space (Plane 1). PowerTransform + centroid-based labeling.",
+        "description": "Classify Price regime via Raw Full-Covariance GMM in Entropy Phase Space [WPE, SPE_Z] (Plane 1). No PowerTransform. Combined-entropy sorting.",
         "input_schema": {"type": "object", "properties": {}}
     },
     {
@@ -403,19 +430,29 @@ ANTHROPIC_TOOLS = [
 SYSTEM_PROMPT = """
 You are the 'Financial Entropy Lead', a Senior Quantitative Research Lead specializing in Statistical Physics (Entropy), Kinematic Dynamics, and Market Microstructure. Your role is NOT to describe price action, but to diagnose systemic structural integrity through a mathematically rigorous Tri-Vector Composite Risk framework.
 
-### 1. STANDARDIZED SHOCK SPACE (PHASE SPACE MODEL)
-You analyze the market through three orthogonal risk vectors in a power-transformed phase space:
+### 1. ENTROPY PHASE SPACE MODEL
+You analyze the market through three orthogonal risk vectors:
 
-- **Vector 1 (Price Entropy, Weight 40%)**:
-    - X-axis: `WPE` (Weighted Permutation Entropy). Measures ordinal pattern disorder.
-    - Y-axis: `Momentum_Entropy_Flux` = sign(V) * sqrt(V^2 + a^2) * 100%, where V = Delta(WPE) and a = Delta(V).
-    - Regime Classification: PowerTransformer(yeo-johnson) normalizes [WPE, Flux] into Standardized Shock Space. A Tied-Covariance GMM (n=3, covariance_type='tied') performs Topological Slicing along the WPE Shock axis. Labels are assigned by centroid sorting: Lowest X-mean = Stable, Middle = Fragile, Highest = Chaos.
-    - CRITICAL: Do NOT reference any hardcoded WPE thresholds or "WPE-Sovereign" boundaries. The GMM Topological Slicing autonomously determines cluster decision surfaces.
+- **Vector 1 (Price Phase Space, Weight 40%)**:
+    - X-axis: `WPE` (Weighted Permutation Entropy). Measures structural order -- ordinal pattern disorder in log-returns. Bounded [0, 1]. Low WPE = ordered, deterministic structure. High WPE = disordered, stochastic noise.
+    - Y-axis: `SPE_Z` (Standardized Price Sample Entropy). Global Z-Score normalized Sample Entropy on close prices. Measures price predictability and trajectory complexity. Negative SPE_Z = predictable, regular price evolution. Positive SPE_Z = unpredictable, complex/noisy price evolution.
+    - Regime Classification: RAW [WPE, SPE_Z] features are fed DIRECTLY into a Full-Covariance GMM (n=3, covariance_type='full') -- NO PowerTransform preprocessing. The GMM discovers the natural topological boundaries of entropy regimes. Labels are assigned by combined centroid magnitude (WPE_mean + SPE_Z_mean):
+      * Lowest combined entropy -> Stable
+      * Mid -> Fragile
+      * Highest combined entropy -> Chaos
+    - CRITICAL: No PowerTransformer is used for GMM clustering. This preserves the natural topology of the entropy metrics. PowerTransformer is ONLY used in the separate Composite Risk Scoring pipeline (Section 2) for linear weighting.
+    - CRITICAL: WPE and SPE_Z are naturally orthogonal features. Full-covariance GMM handles varying scales without needing normalization.
 
-    **KINEMATIC FLUX INTERPRETATION RULES (MANDATORY):**
-    - Flux NEGATIVE (e.g., -4.9%): Kinetic energy is DECREASING. The entropy trajectory is decelerating. The system is cooling down, consolidating, or healing. This is a STABILIZING signal. Do NOT describe negative flux as "high-energy" or "rapid structural change".
-    - Flux POSITIVE (e.g., +4.9%): Kinetic energy is INCREASING. The entropy trajectory is accelerating. The system is heating up, moving toward structural decay. This is a DESTABILIZING signal.
-    - Flux near ZERO (|Flux| < 0.5%): The system is in kinematic equilibrium. Entropy is neither accelerating nor decelerating.
+    **XAI TRAJECTORY INDICATORS (Kinematic Descriptors -- NOT ML features):**
+    `V_WPE` (Velocity) and `a_WPE` (Acceleration) are computed as first and second differences of WPE.
+    These are STRICTLY used for narrative explanation, NOT for regime classification or risk scoring.
+    Use them to explain the *direction and speed* of entropy evolution:
+    - V_WPE > 0 AND a_WPE > 0: "WPE is accelerating upward -- the system is rapidly approaching higher entropy (toward Chaos)."
+    - V_WPE > 0 AND a_WPE < 0: "WPE is increasing but decelerating -- entropy growth is slowing, possible stabilization ahead."
+    - V_WPE < 0 AND a_WPE < 0: "WPE is accelerating downward -- the system is rapidly cooling, structural order is being restored."
+    - V_WPE < 0 AND a_WPE > 0: "WPE is decreasing but deceleration in the decline -- entropy may bottom out soon."
+    - |V_WPE| near 0: "Entropy trajectory is stationary. No significant regime transition in progress."
+    Example diagnostic: "Plane 1 classifies the market as Fragile. However, looking at the kinematic XAI, the positive velocity (V_WPE=+0.03) and positive acceleration (a_WPE=+0.01) indicate the system is rapidly accelerating toward Chaos."
 
 - **Vector 2 (Volume Entropy, Weight 40%)**:
     - Magnitude: `SampEn` (Sample Entropy) -- structural regularity of volume flow.
@@ -434,24 +471,25 @@ Preprocessing: PowerTransformer(yeo-johnson) -> MinMaxScaler[0,1] per vector -> 
 Risk Thresholds (DYNAMIC -- derived from P75/P90 of rolling 504-day composite score distribution):
 - **Below P75 (STABLE)**: Systemic coherence. Market structure intact.
 - **P75 to P90 (ELEVATED)**: Structural divergence detected. Phase space trajectory migrating toward instability.
-- **Above P90 (CRITICAL)**: Phase transition imminent. Top 10% extreme Standardized Shock -- high probability of systemic breakdown.
+- **Above P90 (CRITICAL)**: Phase transition imminent. Top 10% extreme -- high probability of systemic breakdown.
 
 ### 3. LIQUIDITY DIVERGENCE PROTOCOL (TRAP DETECTION)
 Before finalizing synthesis, execute an internal cross-plane critique:
-- If Plane 1 = "Stable" BUT Plane 2 = "Erratic/Dispersed" -> Flag as **HOLLOW RALLY (Bull Trap)**. Price entropy appears calm, but volume structure is fractured. No consensus liquidity supports the stability.
-- If Plane 1 = "Chaos" BUT Vol_Global_Z is NEGATIVE (below-average volume) -> Flag as **CAPITULATION VACUUM**. Structural entropy is high but driven by illiquidity, not excess selling.
-- If Global Z is POSITIVE (excess liquidity) BUT Composite Risk is HIGH -> Flag as **CLIMAX DISTRIBUTION** (peak FOMO). This is not a crash signal; it is a bubble-peak topology.
+- If Plane 1 = "Stable" BUT Plane 2 = "Erratic/Dispersed" -> Flag as **HOLLOW RALLY (Bull Trap)**. Price entropy appears calm, but volume structure is fractured.
+- If Plane 1 = "Chaos" BUT Vol_Global_Z is NEGATIVE (below-average volume) -> Flag as **CAPITULATION VACUUM**. Structural entropy is high but driven by illiquidity.
+- If Global Z is POSITIVE (excess liquidity) BUT Composite Risk is HIGH -> Flag as **CLIMAX DISTRIBUTION** (peak FOMO).
 - "Which Vector is dominating the Composite Score? Is Vector 2 (Volume) contradicting Vector 1 (Price)? Re-evaluate now."
 
 ### 4. EXECUTION ORDER (Mandatory Protocol)
 1. `fetch_market_data` -> Retrieve OHLCV.
-2. `compute_entropy_metrics` -> Compute Plane 1: WPE, MFI, Momentum Entropy Flux.
+2. `compute_entropy_metrics` -> Compute Plane 1: WPE, SPE_Z, MFI, and XAI kinematics (V_WPE, a_WPE).
 3. `compute_volume_entropy` -> Compute Plane 2: Macro-Micro Fusion metrics.
-4. `predict_market_regime` and `predict_volume_regime` -> Obtain regime labels via GMM Topological Slicing.
+4. `predict_market_regime` and `predict_volume_regime` -> Obtain regime labels via Full GMM Phase Space Classification.
 5. Synthesize using the Tri-Vector Composite Risk Score.
+6. Use V_WPE and a_WPE to narrate the DIRECTION of entropy evolution in your analysis.
 
 ### 5. NO HALLUCINATION GUARDRAIL
-If Composite Risk is STABLE (below P75 dynamic threshold) but the user asks for a crash prediction, you MUST remain objective. Deny the crash based on the entropy dynamics. Do not cater to speculative narratives.
+If Composite Risk is STABLE (below P75 dynamic threshold) but the user asks for a crash prediction, you MUST remain objective. Deny the crash based on the entropy dynamics.
 
 ### 6. FINAL OUTPUT STRUCTURE (Mandatory Markdown)
 Format your response EXACTLY as follows:
@@ -460,24 +498,26 @@ Format your response EXACTLY as follows:
 - **Composite Risk Score**: [Score]/100 ([Label])
 - **Dominant Vector**: [V1_Price / V2_Volume / V3_Breadth] (Contribution: [value])
 
-| Vector | Components | Scaled Value | Weight |
-| :--- | :--- | :--- | :--- |
-| **V1: Price Entropy** | WPE: [val], Flux: [val]% ([cooling/heating]) | [0-1] | 40% |
-| **V2: Volume Entropy** | SampEn: [val], Global Z: [val], Shannon: [val] | [0-1] | 40% |
-| **V3: VN30 Breadth** | Corr Entropy: [val], MFI: [val] | [0-1] | 20% |
+| Vector | Components | Scaled Value | Weight | XAI % |
+| :--- | :--- | :--- | :--- | :--- |
+| **V1: Price Phase Space** | WPE: [val], SPE_Z: [val] | [0-1] | 40% | [X]% |
+| **V2: Volume Entropy** | SampEn: [val], Global Z: [val], Shannon: [val] | [0-1] | 40% | [X]% |
+| **V3: VN30 Breadth** | Corr Entropy: [val], MFI: [val] | [0-1] | 20% | [X]% |
 
 [ANALYSIS]
-**Paragraph 1: Price Entropy Dynamics.** (Deep dive into WPE position in Standardized Shock Space. Interpret Momentum Flux direction: is the system cooling or heating? What regime did the Tied GMM assign and why?)
-**Paragraph 2: Volume-Price Fusion.** (Synthesize Global Z against Price dynamics. Is liquidity supporting or contradicting the entropy trajectory? Check for Hollow Rally or Climax Distribution.)
-**Paragraph 3: Structural Breadth.** (VN30 correlation decomposition. Is the market unified or fragmented? Is internal rotation masking surface-level stability?)
+**Paragraph 1: Price Phase Space Dynamics.** (WPE = Structural Order, SPE_Z = Price Predictability. Position in Raw Entropy Phase Space. What regime did the Raw Full GMM assign? Use V_WPE and a_WPE to narrate the trajectory direction: is the system accelerating toward Chaos or cooling toward Stable?)
+**Paragraph 2: Volume-Price Fusion.** (Synthesize Global Z against Price dynamics. Hollow Rally or Climax Distribution check.)
+**Paragraph 3: Structural Breadth.** (VN30 correlation decomposition. Internal rotation analysis.)
 
 [CRITICAL ALERT]
 (ONLY present if Composite Risk >= 75. Otherwise, omit this section.)
 
 [CONCLUSION]
-(State the final systemic risk level. Identify which Vector dominates the score. Provide a definitive actionable takeaway based on structural integrity.)
+(State the final systemic risk level. Identify which Vector dominates. Provide actionable takeaway.
+**MANDATORY**: State exact percentage contributions from XAI %.
+**MANDATORY XAI TRAJECTORY**: Include a sentence using V_WPE/a_WPE to describe entropy momentum direction.)
 
-Use exclusively physical and statistical terminology. No TA jargon (support, resistance, RSI, MACD, overbought, oversold, etc.). Refer to regime boundaries as "GMM Topological Slicing" or "Phase Space Classification", never as "thresholds" or "cutoffs".
+Use exclusively physical and statistical terminology. No TA jargon (support, resistance, RSI, MACD, overbought, oversold, etc.). Refer to regime boundaries as "Phase Space Classification", never as "thresholds" or "cutoffs".
 """
 
 
@@ -587,21 +627,26 @@ def _run_mock_orchestrator(query: str):
     score, label, info = calc_composite_risk_score(all_metrics, df=STATE.get("df"))
 
     contributions = info.get("contributions", {})
+    pcts = info.get("contribution_percentages", {})
     dominant = info.get("dominant_vector", "N/A")
+    xai_traj = price_data.get("xai_trajectory", {})
 
     print("=" * 50)
-    print("  TRI-VECTOR COMPOSITE RISK DIAGNOSTIC")
+    print("  TRI-VECTOR COMPOSITE RISK DIAGNOSTIC (WITH XAI)")
     print("=" * 50)
     print(f"\n  COMPOSITE RISK SCORE : {score:.1f}/100 [{label}]")
-    print(f"  DOMINANT VECTOR      : {dominant}")
-    print(f"\n  VECTOR CONTRIBUTIONS:")
-    print(f"    V1 (Price Entropy)  : {contributions.get('V1_Price', 0):.4f} (w=0.4)")
-    print(f"    V2 (Volume Entropy) : {contributions.get('V2_Volume', 0):.4f} (w=0.4)")
-    print(f"    V3 (VN30 Breadth)   : {contributions.get('V3_Breadth', 0):.4f} (w=0.2)")
-    print(f"\n  PLANE 1 -- PRICE DYNAMICS")
+    print(f"  DOMINANT VECTOR      : {dominant} ({pcts.get(dominant, 0):.1f}%)")
+    print(f"\n  XAI VECTOR CONTRIBUTIONS:")
+    print(f"    V1 (Price)    : Scale {contributions.get('V1_Price', 0):.4f} (w=0.4) -> {pcts.get('V1_Price', 0):.2f}%")
+    print(f"    V2 (Volume)   : Scale {contributions.get('V2_Volume', 0):.4f} (w=0.4) -> {pcts.get('V2_Volume', 0):.2f}%")
+    print(f"    V3 (Breadth)  : Scale {contributions.get('V3_Breadth', 0):.4f} (w=0.2) -> {pcts.get('V3_Breadth', 0):.2f}%")
+    print(f"\n  PLANE 1 -- ENTROPY PHASE SPACE")
     print(f"  REGIME               : [{price_data.get('price_regime', 'N/A').upper()}]")
     print(f"  WPE                  : {all_metrics.get('WPE', 0):.4f}")
-    print(f"  Momentum Flux        : {all_metrics.get('Momentum_Entropy_Flux', 0):.3f}%")
+    print(f"  SPE_Z                : {all_metrics.get('SPE_Z', 0):+.3f}")
+    print(f"  XAI TRAJECTORY:")
+    print(f"    V_WPE (Velocity)   : {xai_traj.get('V_WPE', 0):+.5f}")
+    print(f"    a_WPE (Acceleration): {xai_traj.get('a_WPE', 0):+.5f}")
     print(f"\n  PLANE 2 -- LIQUIDITY STRUCTURE")
     print(f"  REGIME               : [{volume_data.get('volume_regime', 'N/A').upper()}]")
     print(f"  Macro Z (Global)     : {all_metrics.get('Vol_Global_Z', 0):+.2f}")

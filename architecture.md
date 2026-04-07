@@ -2,7 +2,7 @@
 
 ## Financial Entropy Agent -- Technical Architecture Specification
 
-**Version**: 3.1 (Decoupled Pipeline Refactor)
+**Version**: 4.0 (Raw Phase Space + XAI Decoupling)
 **Classification**: Dual-Plane Unsupervised Diagnostics + Tri-Vector Composite Risk Engine
 
 ---
@@ -21,7 +21,7 @@
 
 ## 1. The Great Purge
 
-The following legacy Technical Analysis (TA) components have been **permanently deprecated and removed** from the codebase:
+The following legacy components have been **permanently deprecated and removed** from the codebase:
 
 | Deprecated Component | Description | Reason for Removal |
 |:---|:---|:---|
@@ -30,17 +30,21 @@ The following legacy Technical Analysis (TA) components have been **permanently 
 | `Historical Rhyme Matching` | Cosine/Euclidean similarity search | Data-snooping; overfitting to local history |
 | `vstreak_library.pkl` | Local binary cache for pattern storage | Stateful artifact; violates statelessness |
 | `IncrementalHybridMemory` | Local disk persistence layer | Replaced by stateless, on-the-fly computation |
-| `WPE Sovereignty` | Hardcoded WPE thresholds (0.55, 0.80) | Human-imposed bias; replaced by Tied GMM |
+| `WPE Sovereignty` | Hardcoded WPE thresholds (0.55, 0.80) | Human-imposed bias; replaced by GMM |
 | `KDE Local Minima` | Kernel Density Estimation for WPE boundaries | Still a threshold heuristic; replaced by GMM |
 | `Z-score + Sigmoid` | Composite risk normalization pipeline | Assumes normality; replaced by PowerTransformer |
+| `Momentum_Entropy_Flux` | `sign(V) * sqrt(V^2 + a^2) * 100%` Y-axis | Too volatile; replaced by SPE_Z |
+| `PowerTransformer (Plane 1)` | Yeo-Johnson on GMM input features | Destroys natural topology; removed from clustering |
+| `covariance_type='tied'` | Shared covariance GMM | Replaced by `'full'` for free cluster geometry |
+| `means_init` | Forced centroid initialization | Removed; GMM discovers centers autonomously |
 
-**Design Principle**: The system now operates as a **pure, stateless mathematical engine**. All metrics are computed on-the-fly from raw OHLCV data. No local binary storage, no historical caching, no human-imposed classification boundaries.
+**Design Principle**: The system operates as a **pure, stateless mathematical engine**. All metrics are computed on-the-fly from raw OHLCV data. No local binary storage, no historical caching, no human-imposed classification boundaries.
 
 ---
 
 ## 2. Conceptual Separation: Planes vs. Vectors
 
-The system contains two **parallel, independent pipelines** that serve fundamentally different purposes. Conflating them is a critical architectural error.
+The system contains two **parallel, independent pipelines** that serve fundamentally different purposes.
 
 | Concept | Definition | Count | Purpose |
 |:---|:---|:---|:---|
@@ -63,22 +67,22 @@ The system contains two **parallel, independent pipelines** that serve fundament
                   +-----+-----+                             +-------------+-------------+
                   |           |                             |             |             |
                PLANE 1     PLANE 2                      VECTOR 1      VECTOR 2      VECTOR 3
-               (Price)     (Volume)                     (Price)       (Volume)     (VN30 Breadth)
+               (Price)     (Volume)                  (Price Phase)    (Volume)     (VN30 Breadth)
                   |           |                             |             |             |
-              WPE Shock    Shannon                     WPE / Flux    SampEn / GZ    CorrEnt / MFI
-              Flux Shock   SampEn                          |             |             |
-                  |           |                             +-------------+-------------+
-              Tied GMM     Full GMM                                      |
-             (3 Regimes)  (3 Regimes)                         PowerTransformer (Yeo-Johnson)
-                                                                         |
+              RAW WPE      Shannon                   WPE / |SPE_Z|   SampEn / GZ    CorrEnt / MFI
+              RAW SPE_Z    SampEn                         |             |             |
+                  |           |                           +-------------+-------------+
+              Full GMM     Full GMM                                     |
+             (3 Regimes)  (3 Regimes)                       PowerTransformer (Yeo-Johnson)
+            (NO transform)                                              |
                                                                   MinMaxScaler [0, 1]
-                                                                         |
-                                                          Weighted Sum: 0.4*V1 + 0.4*V2 + 0.2*V3
-                                                                         |
+                  |                                                     |
+          V_WPE, a_WPE                               Weighted Sum: 0.4*V1 + 0.4*V2 + 0.2*V3
+          (XAI Overlay)                                                 |
                                                              Composite Risk Score (0-100)
-                                                                         |
+                                                                        |
                                                              P75/P90 Rolling 504-day
-                                                                         |
+                                                                        |
                                                           STABLE / ELEVATED / CRITICAL
 ```
 
@@ -88,11 +92,11 @@ The system contains two **parallel, independent pipelines** that serve fundament
 
 Module A provides **visual, qualitative proof** of structural state via two independent 2D phase spaces, each with its own GMM classifier.
 
-### 3.1 Plane 1: Standardized Shock Space (Price Kinematics)
+### 3.1 Plane 1: Raw Entropy Phase Space (Price Structure)
 
 #### 3.1.1 Feature Extraction
 
-**X-Axis: Weighted Permutation Entropy (WPE)**
+**X-Axis: Weighted Permutation Entropy (WPE) -- Structural Order**
 
 $$H_{WPE} = -\frac{1}{\ln(m!)} \sum_{w} p_w \cdot \ln(p_w)$$
 
@@ -101,61 +105,85 @@ where $p_w$ are amplitude-weighted permutation probabilities, $m$ is the embeddi
 - $H \to 0$: Perfectly ordered (deterministic trend)
 - $H \to 1$: Maximum disorder (stochastic noise)
 
-**Y-Axis: Momentum Entropy Flux**
+**Y-Axis: Standardized Price Sample Entropy (SPE_Z) -- Price Predictability**
 
-$$V(t) = \Delta WPE(t) = WPE(t) - WPE(t-1)$$
+$$SampEn(m, r, N) = -\ln\frac{A}{B}$$
 
-$$a(t) = \Delta V(t) = V(t) - V(t-1)$$
+where $A$ is the number of template matches of length $m+1$, $B$ is the number of template matches of length $m$, and $r = 0.2 \cdot \text{std}(\text{window})$ is the similarity threshold. Computed on a rolling window of 60 close prices.
 
-$$\text{Flux}(t) = \text{sign}(V) \cdot \sqrt{V^2 + a^2} \times 100\%$$
+The raw Sample Entropy is then Global Z-Score normalized:
 
-Kinematic interpretation:
-- **Flux < 0**: Kinetic energy DECREASING. System cooling, consolidating, stabilizing.
-- **Flux > 0**: Kinetic energy INCREASING. System heating, accelerating toward decay.
-- **Flux ~ 0**: Kinematic equilibrium. No structural acceleration.
+$$SPE\_Z = \frac{SampEn - \mu_{all}}{\sigma_{all}}$$
 
-#### 3.1.2 Power Transform (Entropy Shock Normalization)
+- $SPE\_Z < 0$: Price evolution is more predictable/regular than average
+- $SPE\_Z > 0$: Price evolution is more unpredictable/complex than average
 
-Financial entropy distributions are inherently **left-skewed and bounded** ($WPE \in [0, 1]$). The system applies `PowerTransformer(method='yeo-johnson', standardize=True)` to both axes **before** GMM fitting.
+**Why these two features are naturally orthogonal:**
 
-After transformation, the data represents **"Entropy Shocks"** -- standardized deviations from the expected distributional shape.
+| Property | WPE | SPE_Z |
+|:---|:---|:---|
+| Input data | Log-returns | Close prices |
+| What it measures | Ordinal pattern disorder | Amplitude-based trajectory complexity |
+| Sensitivity | Rank-order of values | Distance between values |
+| Scale | Bounded [0, 1] | Z-score (unbounded) |
 
-#### 3.1.3 Tied-Covariance GMM (Topological Slicing)
+#### 3.1.2 Raw Full-Covariance GMM (No PowerTransform)
 
 ```python
 GaussianMixture(
     n_components=3,
-    covariance_type='tied',   # 3 clusters share 1 covariance matrix
-    means_init=[[-1.5, 0], [0, 0], [+1.5, 0]],  # Force left-to-right along X
+    covariance_type='full',   # Each cluster has its own 2x2 covariance matrix
+    n_init=10,
     max_iter=500,
+    # NO means_init -- GMM discovers centers autonomously
 )
 ```
 
-**Why `covariance_type='tied'`?**
+**Why NO PowerTransformer for Plane 1?**
 
-With `'full'` covariance, each cluster has its own 2x2 matrix. When the Y-axis (Flux) has heavy tails, one cluster can develop a massive Y-variance, creating an ellipse that wraps concentrically around other clusters ("core vs. periphery" topology).
+The `PowerTransformer(yeo-johnson)` was previously applied to force the [WPE, SPE_Z] data into a Gaussian distribution before GMM fitting. However, this **destroys the natural topological boundaries** of the entropy metrics. Since SPE_Z is already a well-behaved Z-score and WPE is bounded [0,1], the Full-Covariance GMM can handle their different scales natively through its cluster-specific covariance matrices.
 
-With `'tied'`, all 3 clusters share a **single covariance matrix**. Every cluster has the **same ellipse shape and orientation** -- only the centroid positions differ. Combined with `means_init` spread along the X-axis, the GMM is mathematically forced to partition LEFT-TO-RIGHT.
+This design matches **Plane 2 (Volume)**, which also feeds raw features directly into Full-Covariance GMM.
 
-**Label Assignment Protocol:**
+**Label Assignment Protocol (Combined Entropy Sorting):**
 ```
-1. Sort GMM centroids by X-axis: argsort(means_[:, 0])
-2. Map: Lowest X  -> Stable (0)
-        Middle X  -> Fragile (1)
-        Highest X -> Chaos (2)
-```
-
-#### 3.1.4 Confidence Ellipses (95%)
-
-With tied covariance, the ellipse geometry is computed once from the shared matrix $\Sigma$:
-
-```
-1. Eigendecomposition: eigenvalues, eigenvectors = eigh(Sigma)
-2. Semi-axes: width = 2 * n_std * sqrt(lambda_1), height = 2 * n_std * sqrt(lambda_2)
-3. Rotation angle: theta = arctan2(eigenvectors[1,0], eigenvectors[0,0])
+1. Sum GMM centroid means: score_k = WPE_mean_k + SPE_Z_mean_k
+2. Map: Lowest combined entropy  -> Stable (0)
+        Middle combined entropy  -> Fragile (1)
+        Highest combined entropy -> Chaos (2)
 ```
 
-All 3 ellipses have **identical width, height, and angle** -- placed at different centroid positions.
+#### 3.1.3 Confidence Ellipses (95%)
+
+With `covariance_type='full'`, each cluster has a **unique ellipse shape and orientation**:
+
+```
+For each cluster k:
+    1. Extract covariance: Sigma_k = gmm.covariances_[k]  # Shape: (2, 2)
+    2. Eigendecomposition: eigenvalues, eigenvectors = eigh(Sigma_k)
+    3. Semi-axes: width = 2 * n_std * sqrt(lambda_1), height = 2 * n_std * sqrt(lambda_2)
+    4. Rotation angle: theta = arctan2(eigenvectors[1,0], eigenvectors[0,0])
+```
+
+Unlike tied covariance (where all ellipses are identical shapes at different positions), full covariance produces ellipses with **different widths, heights, and rotations** -- revealing the true geometric structure of each regime.
+
+#### 3.1.4 XAI Kinematic Trajectory Indicators (Decoupled)
+
+Velocity and Acceleration of WPE are computed as **Explainable AI (XAI) overlay descriptors**. They are **NOT** fed into the GMM classifier or the Composite Risk Engine.
+
+$$V_{WPE}(t) = WPE(t) - WPE(t-1)$$
+
+$$a_{WPE}(t) = V_{WPE}(t) - V_{WPE}(t-1)$$
+
+These indicators are injected into the LLM's system prompt to narrate the **direction and momentum** of entropy evolution:
+
+| V_WPE | a_WPE | Interpretation |
+|:---|:---|:---|
+| > 0 | > 0 | Accelerating toward Chaos |
+| > 0 | < 0 | Increasing but decelerating; stabilization ahead |
+| < 0 | < 0 | Accelerating toward Stable |
+| < 0 | > 0 | Decreasing but bottoming out |
+| ~ 0 | ~ 0 | Stationary; no regime transition |
 
 ### 3.2 Plane 2: Volume Entropy Space (Liquidity Structure)
 
@@ -174,7 +202,7 @@ All 3 ellipses have **identical width, height, and angle** -- placed at differen
 
 #### 3.2.3 Full-Covariance GMM (Volume Regimes)
 
-Plane 2 uses `GaussianMixture(n_components=3, covariance_type='full')` on `[Vol_Shannon, Vol_SampEn]`. Unlike Plane 1, the volume space does not have the concentric topology problem because both axes have comparable variance scales.
+Plane 2 uses `GaussianMixture(n_components=3, covariance_type='full')` on `[Vol_Shannon, Vol_SampEn]`. Both planes now share the same methodology: raw features into Full-Covariance GMM.
 
 Labels: Consensus Flow, Dispersed Flow, Erratic/Noisy Flow.
 
@@ -193,12 +221,14 @@ Labels: Consensus Flow, Dispersed Flow, Erratic/Noisy Flow.
 
 Module B is a **purely mathematical pipeline** that produces a continuous 0-100 systemic risk score. It has no visual scatter plots and no GMM classifiers. It consumes raw metrics from all three measurement domains (Price, Volume, VN30 Breadth) and synthesizes them into a single composite index.
 
+**CRITICAL DESIGN NOTE:** PowerTransformer(yeo-johnson) is used **ONLY** in Module B for normalizing feature distributions before linear weighting. It is deliberately **excluded** from Module A (GMM clustering) to preserve natural topological boundaries.
+
 ### 4.1 Vector Definitions
 
 | Vector | Weight | Raw Features | Source Domain |
 |:---|:---|:---|:---|
-| **V1** (Price Kinematics) | 0.40 | `WPE`, `abs(Momentum_Flux)/100` | Price OHLCV |
-| **V2** (Volume Depth) | 0.40 | `Vol_SampEn`, `abs(Vol_Global_Z)`, `Vol_Shannon` | Volume series |
+| **V1** (Price Phase Space) | 0.40 | `WPE`, `abs(SPE_Z)` | Price OHLCV |
+| **V2** (Liquidity Depth) | 0.40 | `Vol_SampEn`, `abs(Vol_Global_Z)`, `Vol_Shannon` | Volume series |
 | **V3** (Structural Breadth) | 0.20 | `Corr_Entropy/100`, `MFI` | VN30 cross-section |
 
 **Note:** V3 (VN30 Breadth) has **no visual Plane and no GMM classifier**. It is a raw feature vector fed directly into the composite scoring formula.
@@ -259,8 +289,8 @@ c_scaled = mms.transform(c_pt)        # Scale using history params
 
 The system uses a **504-day rolling window** (approximately 2 trading years) for all statistical calibrations:
 
-- PowerTransformer fitting per vector
-- MinMaxScaler fitting per vector
+- PowerTransformer fitting per vector (Module B only)
+- MinMaxScaler fitting per vector (Module B only)
 - Composite score percentile computation
 
 **Rationale**: A 2-year window captures at least one full market cycle while ensuring the model adapts to macroeconomic regime changes and forgets outdated structural patterns.
@@ -290,16 +320,17 @@ if critical_bound - elevated_bound < 3.0:
 
 ```
 1. fetch_market_data       -> Retrieve OHLCV (VNINDEX) + VN30
-2. compute_entropy_metrics -> WPE, MFI, Momentum Entropy Flux
+2. compute_entropy_metrics -> WPE, SPE_Z, MFI, V_WPE, a_WPE (XAI)
 3. compute_volume_entropy  -> Shannon, SampEn, Global Z
-4. predict_market_regime   -> Tied GMM Topological Slicing (Plane 1)
+4. predict_market_regime   -> Raw Full GMM Phase Space (Plane 1)
 5. predict_volume_regime   -> Full GMM Volume Classification (Plane 2)
 6. Synthesize              -> Tri-Vector Composite Risk Score (Module B)
+7. Narrate                 -> Use V_WPE / a_WPE for XAI trajectory analysis
 ```
 
 ### 6.2 Reasoning Constraints
 
-- Permitted: *"Entropy Shock"*, *"Phase Transition"*, *"Kinematic Energy"*, *"Systemic Coherence"*, *"Structural Divergence"*, *"GMM Topological Slicing"*
+- Permitted: *"Entropy Phase Space"*, *"Phase Transition"*, *"Structural Order"*, *"Price Predictability"*, *"Systemic Coherence"*, *"Structural Divergence"*, *"Phase Space Classification"*, *"XAI Trajectory"*
 - Forbidden: *"Support level"*, *"Resistance"*, *"Bollinger Bands"*, *"RSI"*, *"Moving Average"*, *"Overbought/Oversold"*, *"thresholds"*, *"cutoffs"*
 
 ---
@@ -312,16 +343,18 @@ graph TD
         A["OHLCV Data\nvnstock / yfinance"] --> B["Log Returns"]
         A --> C["Volume Series"]
         A --> D["VN30 Returns"]
+        A --> A2["Close Prices"]
     end
 
     subgraph "MODULE A: Dual-Plane Unsupervised GMM (Visual Diagnostics)"
-        subgraph "Plane 1: Price Kinematics"
+        subgraph "Plane 1: Raw Entropy Phase Space"
             B --> E["Rolling WPE\nm=3, tau=1, w=22"]
-            E --> F["Momentum Entropy Flux\nV, a, Flux"]
-            F --> H["PowerTransformer\nyeo-johnson"]
-            E --> H
-            H --> I["Tied GMM n=3\ncovariance_type=tied"]
-            I --> J["Regime Labels\nStable / Fragile / Chaos"]
+            A2 --> SPE["Rolling Price SampEn\nwindow=60, m=2, r=0.2*std"]
+            SPE --> SPEZ["Global Z-Score\n-> SPE_Z"]
+            E --> RAW_GMM["Full GMM n=3\ncovariance_type=full\nNO PowerTransform"]
+            SPEZ --> RAW_GMM
+            RAW_GMM --> J["Regime Labels\nStable / Fragile / Chaos"]
+            E --> XAI["V_WPE, a_WPE\n(XAI Overlay Only)"]
         end
         subgraph "Plane 2: Volume Structure"
             C --> K["log1p Transform"]
@@ -334,7 +367,8 @@ graph TD
     end
 
     subgraph "MODULE B: Tri-Vector Composite Risk Engine (Mathematical Scoring)"
-        E --> S["V1: WPE + Flux"]
+        E --> S["V1: WPE + |SPE_Z|"]
+        SPEZ --> S
         O --> T["V2: SampEn + GZ + Shannon"]
         N --> T
         K --> L["Global Z-Score\nMacro Scale"]
@@ -345,7 +379,7 @@ graph TD
         E --> G["MFI = WPE * (1-C)"]
         R --> U["V3: Corr_Entropy + MFI"]
         G --> U
-        S --> V["PowerTransformer + MinMaxScaler\nper vector"]
+        S --> V["PowerTransformer + MinMaxScaler\nper vector (RISK ENGINE ONLY)"]
         T --> V
         U --> V
         V --> W["Weighted Sum\n0.4*V1 + 0.4*V2 + 0.2*V3"]
@@ -357,6 +391,7 @@ graph TD
     J --> AA["Dashboard\nDual-Plane Scatter Plots\n95% Confidence Ellipses"]
     VOL_GMM --> AA
     Z --> AA
+    XAI --> AA
 ```
 
 ---
@@ -366,11 +401,11 @@ graph TD
 | Module | File | Dependencies | Purpose |
 |:---|:---|:---|:---|
 | Data Skill | `skills/data_skill.py` | `vnstock`, `yfinance`, `pandas` | OHLCV retrieval |
-| Quant Skill | `skills/quant_skill.py` | `numpy`, `numba`, `pandas` | WPE, SampEn, Shannon, EVD, Flux |
-| DS Skill | `skills/ds_skill.py` | `sklearn` (GMM, PowerTransformer), `scipy` | Tied GMM + Volume GMM classification |
-| Orchestrator | `agent_orchestrator.py` | `anthropic`, `sklearn` (PowerTransformer, MinMaxScaler) | ReAct + Composite Risk |
+| Quant Skill | `skills/quant_skill.py` | `numpy`, `numba`, `pandas` | WPE, SampEn (Price + Volume), Shannon, EVD, Kinematics |
+| DS Skill | `skills/ds_skill.py` | `sklearn` (GMM, PowerTransformer), `scipy` | Raw Full GMM (Plane 1) + PowerTransform Volume GMM (Plane 2) |
+| Orchestrator | `agent_orchestrator.py` | `anthropic`, `sklearn` (PowerTransformer, MinMaxScaler) | ReAct + Composite Risk (PowerTransform in risk engine only) |
 | Dashboard | `dashboard.py` | `streamlit`, `plotly` | Dual-Plane visualization terminal |
 
 ---
 
-*This document constitutes the complete technical specification of the Financial Entropy Agent v3.1 architecture. "Planes" refer exclusively to 2D visual GMM scatter plots (2 total). "Vectors" refer exclusively to feature groupings for the composite risk formula (3 total). These are parallel, independent pipelines.*
+*This document constitutes the complete technical specification of the Financial Entropy Agent v4.0 architecture. "Planes" refer exclusively to 2D visual GMM scatter plots (2 total). "Vectors" refer exclusively to feature groupings for the composite risk formula (3 total). These are parallel, independent pipelines. PowerTransformer is used ONLY in the Composite Risk Engine (Module B), never in GMM clustering (Module A).*

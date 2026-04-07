@@ -1,6 +1,6 @@
 """
 Financial Entropy Agent -- Tri-Vector Composite Risk Terminal
-Dual Pipeline (API/Upload), Kinematic GMM Scatter, Composite Risk Engine.
+Dual Pipeline (API/Upload), Entropy Phase Space GMM Scatter, Composite Risk Engine.
 """
 
 import streamlit as st
@@ -16,7 +16,8 @@ import io
 from skills.data_skill import get_latest_market_data, fetch_vn30_returns
 from skills.quant_skill import (
     calc_rolling_wpe, calc_mfi, calc_correlation_entropy,
-    calc_rolling_volume_entropy, calc_momentum_entropy_flux,
+    calc_rolling_volume_entropy, calc_wpe_kinematics,
+    calc_rolling_price_sample_entropy, calc_spe_z,
 )
 from skills.ds_skill import fit_predict_regime, fit_predict_volume_regime
 from agent_orchestrator import calc_composite_risk_score
@@ -78,6 +79,79 @@ st.markdown("""
     }
     
     .stPlotlyChart { background: transparent !important; }
+    
+    .analysis-card {
+        background: #111611;
+        border: 1px solid #1a3a1a;
+        border-radius: 8px;
+        padding: 18px 22px;
+        margin: 12px 0;
+    }
+    .analysis-card-title {
+        font-size: 0.85rem;
+        color: #39FF14;
+        text-transform: uppercase;
+        letter-spacing: 2px;
+        font-weight: 800;
+        margin-bottom: 12px;
+        font-family: 'Courier Prime', monospace;
+    }
+    .regime-badge {
+        display: inline-block;
+        padding: 4px 16px;
+        border-radius: 4px;
+        font-weight: 800;
+        font-size: 0.9rem;
+        letter-spacing: 1.5px;
+        text-transform: uppercase;
+        font-family: 'Courier Prime', monospace;
+    }
+    .xai-trajectory-box {
+        background: #0d1a0d;
+        border: 1px dashed #2a4a2a;
+        border-radius: 6px;
+        padding: 12px 18px;
+        margin-top: 12px;
+    }
+    .xai-label {
+        color: #666;
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 1.5px;
+        margin-bottom: 6px;
+    }
+    .xai-values {
+        display: flex;
+        gap: 30px;
+        margin-bottom: 8px;
+    }
+    .xai-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .xai-item-label {
+        color: #888;
+        font-size: 0.82rem;
+    }
+    .xai-item-value {
+        color: #00BFFF;
+        font-weight: 800;
+        font-family: 'Courier Prime', monospace;
+    }
+    .xai-narrative {
+        color: #a0d0a0;
+        font-size: 0.88rem;
+        font-style: italic;
+        margin-top: 6px;
+        line-height: 1.5;
+    }
+    .analysis-text {
+        color: #c0e0c0;
+        font-size: 0.9rem;
+        line-height: 1.65;
+        margin-top: 8px;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -150,13 +224,18 @@ def load_and_compute_data(start_date_str, end_date_str, file_bytes=None, file_na
     df["Complexity"] = c_arr
     df["MFI"] = mfi_arr
     
-    # 2. Kinematic Momentum Entropy Flux
-    vel, acc, flux = calc_momentum_entropy_flux(wpe_arr)
-    df["PE_Velocity"] = vel
-    df["PE_Acceleration"] = acc
-    df["Momentum_Entropy_Flux"] = flux
+    # 2. Price Sample Entropy (SPE_Z) -- Plane 1 Y-axis
+    sampen_price = calc_rolling_price_sample_entropy(df["Close"].values, window=60)
+    spe_z = calc_spe_z(sampen_price)
+    df["Price_SampEn"] = sampen_price
+    df["SPE_Z"] = spe_z
+
+    # 3. WPE Kinematics (XAI trajectory indicators -- NOT used in ML)
+    vel, acc = calc_wpe_kinematics(wpe_arr)
+    df["V_WPE"] = vel
+    df["a_WPE"] = acc
     
-    # 3. Volume Entropy Plane (Macro-Micro Fusion)
+    # 4. Volume Entropy Plane (Macro-Micro Fusion)
     if "Volume" in df.columns:
         vol_shannon, vol_sampen, vol_global_z, vol_rolling_z = calc_rolling_volume_entropy(
             df["Volume"].values, window=60, z_window=252
@@ -171,7 +250,7 @@ def load_and_compute_data(start_date_str, end_date_str, file_bytes=None, file_na
         df["Vol_Global_Z"] = np.nan
         df["Vol_Rolling_Z"] = np.nan
     
-    # 4. VN30 Cross-Sectional Entropy
+    # 5. VN30 Cross-Sectional Entropy
     try:
         vn30_rets = fetch_vn30_returns(start_date=start_date_str, end_date=end_date_str)
         cross_entropy = calc_correlation_entropy(vn30_rets, window=22)
@@ -179,18 +258,14 @@ def load_and_compute_data(start_date_str, end_date_str, file_bytes=None, file_na
     except Exception as e:
         df["Cross_Sectional_Entropy"] = np.nan
         
-    # 5. Predict Price Regime (Tied GMM in Standardized Shock Space)
+    # 6. Predict Price Regime (Full GMM in Raw Entropy Phase Space: [WPE, SPE_Z])
     price_clf = None
-    valid_df = df.dropna(subset=["WPE", "Momentum_Entropy_Flux"]).copy()
+    valid_df = df.dropna(subset=["WPE", "SPE_Z"]).copy()
     if not valid_df.empty:
-        features = valid_df[["WPE", "Momentum_Entropy_Flux"]].values
+        features = valid_df[["WPE", "SPE_Z"]].values
         labels, price_clf = fit_predict_regime(features, n_components=3)
         valid_df["RegimeLabel"] = labels
         valid_df["RegimeName"] = [price_clf.get_regime_name(lbl) for lbl in labels]
-        # Luu transformed data cho scatter plot
-        X_tf = price_clf.transform(features)
-        valid_df["WPE_Transformed"] = X_tf[:, 0]
-        valid_df["Flux_Transformed"] = X_tf[:, 1]
     
     # Luu classifier vao df.attrs de truy cap cho ellipse rendering
     df.attrs["price_classifier"] = price_clf
@@ -200,13 +275,10 @@ def load_and_compute_data(start_date_str, end_date_str, file_bytes=None, file_na
     if not valid_df.empty:
         df.loc[valid_df.index, "RegimeName"] = valid_df["RegimeName"]
         df.loc[valid_df.index, "RegimeLabel"] = valid_df["RegimeLabel"]
-        if "WPE_Transformed" in valid_df.columns:
-            df.loc[valid_df.index, "WPE_Transformed"] = valid_df["WPE_Transformed"]
-            df.loc[valid_df.index, "Flux_Transformed"] = valid_df["Flux_Transformed"]
     df["RegimeName"] = df["RegimeName"].ffill()
     df["RegimeLabel"] = df["RegimeLabel"].ffill()
     
-    # 6. Volume Regime (GMM -- Plane 2)
+    # 7. Volume Regime (GMM -- Plane 2)
     vol_valid = df.dropna(subset=["Vol_Shannon", "Vol_SampEn"]).copy()
     if not vol_valid.empty and len(vol_valid) >= 10:
         vol_features = vol_valid[["Vol_Shannon", "Vol_SampEn"]].values
@@ -271,9 +343,9 @@ prev = df.iloc[-2] if len(df) > 1 else latest
 current_wpe = latest.get("WPE", 0.5)
 current_mfi = latest.get("MFI", 0.5)
 current_cse = latest.get("Cross_Sectional_Entropy", 50.0)
-current_flux = latest.get("Momentum_Entropy_Flux", 0.0)
-current_pe_v = latest.get("PE_Velocity", 0.0)
-current_pe_a = latest.get("PE_Acceleration", 0.0)
+current_spe_z = latest.get("SPE_Z", 0.0)
+current_v_wpe = latest.get("V_WPE", 0.0)
+current_a_wpe = latest.get("a_WPE", 0.0)
 
 # Plane 2
 current_vol_shannon = latest.get("Vol_Shannon", float("nan"))
@@ -309,11 +381,11 @@ else:
     risk_color = "#00FF41"
 
 # ==============================================================================
-# TOP KPI SECTION: THE GRID OF 4
+# TOP KPI SECTION: TRI-VECTOR ALIGNED
 # ==============================================================================
 col1, col2, col3, col4 = st.columns(4)
 
-# --- Column 1: Systemic Risk Gauge ---
+# --- Column 1: Systemic Risk Gauge + Dominant Force ---
 with col1:
     fig_gauge = go.Figure(go.Indicator(
         mode = "gauge",
@@ -334,60 +406,66 @@ with col1:
     
     fig_gauge.update_layout(
         autosize=True,
-        height=150, 
-        margin=dict(l=20, r=20, t=20, b=20), 
+        height=170, 
+        margin=dict(l=20, r=20, t=10, b=10), 
         paper_bgcolor='rgba(0,0,0,0)',
         annotations=[dict(
             text=f"{risk_score:.1f}",
-            x=0.5, y=0.35,
+            x=0.5, y=0.25,
             xref="paper", yref="paper",
-            font=dict(size=45, color="#FFFFFF", family="Courier Prime"),
+            font=dict(size=40, color="#FFFFFF", family="Courier Prime"),
             showarrow=False,
             xanchor="center",
             yanchor="middle"
         )]
     )
     
-    st.markdown(f'<div class="metric-label" style="text-align:center; padding-top:10px;">{T("COMPOSITE RISK SCORE", "DIEM RUI RO HOP THANH")}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="metric-label" style="text-align:center; padding-top:5px;">{T("COMPOSITE RISK SCORE", "DIEM RUI RO HOP THANH")}</div>', unsafe_allow_html=True)
     st.plotly_chart(fig_gauge, use_container_width=True, config={'displayModeBar': False})
-    st.markdown(f"<div style='text-align:center; color:{risk_color}; font-weight:800; font-size:1.0rem; margin-top:-20px;'>{synthesis_label}</div>", unsafe_allow_html=True)
-
-# --- Column 2: Dominant Risk Vector ---
-with col2:
+    st.markdown(f"<div style='text-align:center; color:{risk_color}; font-weight:800; font-size:1.0rem; margin-top:-15px;'>{synthesis_label}</div>", unsafe_allow_html=True)
+    # Dominant Force sub-text
     dominant_display = dominant_vector.replace("V1_Price", "V1: PRICE").replace("V2_Volume", "V2: VOLUME").replace("V3_Breadth", "V3: BREADTH")
-    dominant_val = contributions.get(dominant_vector, 0)
-    contrib_pct = f"{dominant_val * 100:.1f}%"
-    st.markdown(f"""
-    <div class="arch-badge" style="height: 210px; display: flex; flex-direction: column; justify-content: center;">
-        <div class="metric-label">{T("DOMINANT RISK VECTOR", "VECTOR RUI RO CHU DAO")}</div>
-        <div class="metric-value" style="color: {risk_color}; font-size: 1.2rem; padding: 5px;">{dominant_display}</div>
-        <div style="font-size: 1.0rem; color: #FFD700; margin-top: 5px;">Scaled: {contrib_pct}</div>
-        <div style="font-size: 0.75rem; color: #888; margin-top: 5px;">V1={contributions.get('V1_Price',0):.2f} | V2={contributions.get('V2_Volume',0):.2f} | V3={contributions.get('V3_Breadth',0):.2f}</div>
-    </div>
-    """, unsafe_allow_html=True)
+    dominant_pct = vector_info.get('contribution_percentages', {}).get(dominant_vector, 0)
+    st.markdown(f"<div style='text-align:center; font-size:0.75rem; color:#888; margin-top:4px; font-family:Courier Prime, monospace;'>Dominant: <span style=\"color:#FFD700;\">{dominant_display}</span> ({dominant_pct:.0f}% XAI)</div>", unsafe_allow_html=True)
 
-# --- Column 3: Price Dynamics (Plane 1) ---
-with col3:
+# --- Column 2: V1 Price Phase Space ---
+with col2:
     p1_color = "#00FF41" if "STABLE" in current_regime.upper() else ("#FFD700" if "FRAGILE" in current_regime.upper() else "#FF3131")
-    flux_display = f"{current_flux:+.2f}%" if pd.notna(current_flux) else "N/A"
+    v1_risk = contributions.get('V1_Price', 0) * 100
+    spe_z_display = f"{current_spe_z:+.2f}" if pd.notna(current_spe_z) else "N/A"
     st.markdown(f"""
     <div class="arch-badge" style="height: 210px; display: flex; flex-direction: column; justify-content: center;">
-        <div class="metric-label">{T("PRICE DYNAMICS", "DONG LUC GIA")}</div>
+        <div class="metric-label">{T("V1: PRICE PHASE SPACE", "V1: KHONG GIAN PHA GIA")}</div>
         <div class="metric-value" style="color: {p1_color}; font-size: 1.4rem;">{current_regime}</div>
-        <div style="font-size: 0.9rem; color: #888; margin-top: 5px;">WPE: {current_wpe:.4f}</div>
-        <div style="font-size: 0.9rem; color: #888;">Flux: {flux_display}</div>
+        <div style="font-size: 0.8rem; color: #888; margin-top: 10px;">WPE: {current_wpe:.4f} | SPE_Z: {spe_z_display}</div>
     </div>
     """, unsafe_allow_html=True)
 
-# --- Column 4: Liquidity Depth ---
-with col4:
-    gz_val = current_vol_global_z if pd.notna(current_vol_global_z) else 0.0
-    gz_color = "#00FF41" if abs(gz_val) < 1.0 else ("#FFD700" if abs(gz_val) < 2.0 else "#FF3131")
+# --- Column 3: V2 Liquidity Structure ---
+with col3:
+    vol_regime_upper = current_vol_regime_name.upper()
+    p2_color = "#00FF41" if "CONSENSUS" in vol_regime_upper else ("#FFD700" if "DISPERSED" in vol_regime_upper else "#FF3131")
+    v2_risk = contributions.get('V2_Volume', 0) * 100
     st.markdown(f"""
     <div class="arch-badge" style="height: 210px; display: flex; flex-direction: column; justify-content: center;">
-        <div class="metric-label">{T("LIQUIDITY DEPTH", "DO SAU THANH KHOAN")}</div>
-        <div class="metric-value" style="color: {gz_color}; font-size: 1.6rem;">{vol_gz_kpi}</div>
-        <div style="font-size: 0.9rem; color: #888; margin-top: 10px;">Shannon: {vol_sh_kpi}</div>
+        <div class="metric-label">{T("V2: LIQUIDITY STRUCTURE", "V2: CAU TRUC THANH KHOAN")}</div>
+        <div class="metric-value" style="color: {p2_color}; font-size: 1.1rem;">{current_vol_regime_name}</div>
+        <div style="font-size: 0.8rem; color: #888; margin-top: 10px;">Shannon: {vol_sh_kpi} | SampEn: {vol_se_kpi}</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+# --- Column 4: V3 VN30 Breadth ---
+with col4:
+    breadth_label = "COHESIVE" if current_cse < 40 else ("DISLOCATED" if current_cse > 70 else "FRAGMENTING")
+    p3_color = "#00FF41" if breadth_label == "COHESIVE" else ("#FFD700" if breadth_label == "FRAGMENTING" else "#FF3131")
+    v3_risk = contributions.get('V3_Breadth', 0) * 100
+    cse_display = f"{current_cse:.1f}%"
+    mfi_display = f"{current_mfi:.4f}"
+    st.markdown(f"""
+    <div class="arch-badge" style="height: 210px; display: flex; flex-direction: column; justify-content: center;">
+        <div class="metric-label">{T("V3: VN30 BREADTH", "V3: DO RONG VN30")}</div>
+        <div class="metric-value" style="color: {p3_color}; font-size: 1.4rem;">{breadth_label}</div>
+        <div style="font-size: 0.8rem; color: #888; margin-top: 10px;">Corr Entropy: {cse_display} | MFI: {mfi_display}</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -451,7 +529,7 @@ for i in range(len(shift_indices)):
     )
 
 fig1.update_layout(
-    title=dict(text="VNindex Structure State (Tied GMM Regime)", x=0.5, y=0.98, xanchor="center", yanchor="top"),
+    title=dict(text="VNindex Structure State (Full GMM Regime)", x=0.5, y=0.98, xanchor="center", yanchor="top"),
     template="plotly_dark", height=600, plot_bgcolor='#0E1117', paper_bgcolor='#0E1117',
     legend=dict(orientation="h", yanchor="top", y=1.08, xanchor="right", x=1.0),
     margin=dict(l=20, r=20, b=20, t=60)
@@ -492,16 +570,16 @@ st.plotly_chart(fig2, use_container_width=True)
 st.markdown("---")
 st.subheader(T("2. UNSUPERVISED LEARNING: DUAL-PLANE DS PROOF", "2. BANG CHUNG HOC MAY: HAI MAT PHANG ENTROPY"))
 st.markdown(T(
-    "Plane 1: Tied GMM Topological Slicing (X=WPE Shock, Y=Flux Shock). Plane 2: Volume GMM (X=Shannon, Y=SampEn).",
-    "Mat phang 1: Tied GMM Topological Slicing (X=WPE Shock, Y=Flux Shock). Mat phang 2: Volume GMM (X=Shannon, Y=SampEn)."
+    "Plane 1: Raw Full GMM Phase Space (X=WPE, Y=SPE_Z, no transform). Plane 2: Volume GMM (X=Shannon, Y=SampEn).",
+    "Mat phang 1: Raw Full GMM Phase Space (X=WPE, Y=SPE_Z, khong transform). Mat phang 2: Volume GMM (X=Shannon, Y=SampEn)."
 ))
 
 col_price_plot, col_vol_plot = st.columns([1, 1])
 
-# --- PLOT 1: Price Dynamics Plane (Kinematic) ---
+# --- PLOT 1: Price Dynamics Plane (Raw Entropy Phase Space) ---
 with col_price_plot:
-    st.markdown(f"**{T('PLANE 1: STANDARDIZED SHOCK SPACE', 'MẶT PHẲNG 1: KHONG GIAN SHOCK CHUAN HOA')}**")
-    plot_df = df.dropna(subset=['WPE_Transformed', 'Flux_Transformed', 'RegimeName'])
+    st.markdown(f"**{T('PLANE 1: RAW ENTROPY PHASE SPACE', 'MAT PHANG 1: KHONG GIAN PHA ENTROPY (RAW)')}**")
+    plot_df = df.dropna(subset=['WPE', 'SPE_Z', 'RegimeName'])
     if not plot_df.empty:
         color_map_price = {
             "Stable": "#00FF41",
@@ -509,47 +587,27 @@ with col_price_plot:
             "Chaos": "#FF0000",
         }
         scatter_price = px.scatter(
-            plot_df, x="WPE_Transformed", y="Flux_Transformed",
+            plot_df, x="WPE", y="SPE_Z",
             color="RegimeName",
             color_discrete_map=color_map_price,
-            hover_data=["Close", "WPE", "Momentum_Entropy_Flux", "MFI"],
-            labels={"WPE_Transformed": "Standardized WPE Shock", "Flux_Transformed": "Standardized Flux Shock"},
+            hover_data=["Close", "MFI"],
+            labels={"WPE": "WPE (Weighted Permutation Entropy)", "SPE_Z": "SPE_Z (Standardized Price Sample Entropy)"},
         )
-        # Y=0 horizontal equilibrium line
-        scatter_price.add_hline(y=0, line_dash="dot", line_color="rgba(255,255,255,0.3)", annotation_text="Equilibrium")
 
-        # 95% Confidence Ellipses (Tied GMM: shared shape, different centers)
+        # 95% Confidence Ellipses (Full GMM: unique shape per cluster, RAW space)
         if price_clf is not None:
-            def get_tied_ellipse_params(gmm, n_std=2.0):
-                """Tinh ellipse params cho Tied GMM (1 covariance chung, 3 centroids)."""
-                cov = gmm.covariances_  # Shape: (2, 2) -- ma tran duy nhat
-                eigenvalues, eigenvectors = np.linalg.eigh(cov)
-                order = eigenvalues.argsort()[::-1]
-                eigenvalues = eigenvalues[order]
-                eigenvectors = eigenvectors[:, order]
-                theta = np.degrees(np.arctan2(*eigenvectors[:, 0][::-1]))
-                width, height = 2 * n_std * np.sqrt(eigenvalues)
-                ellipses = []
-                for i in range(gmm.n_components):
-                    mean_x, mean_y = gmm.means_[i]
-                    ellipses.append({
-                        'x0': mean_x, 'y0': mean_y,
-                        'width': width, 'height': height, 'angle': theta,
-                    })
-                return ellipses
-
             try:
-                tied_ellipses = get_tied_ellipse_params(price_clf.gmm, n_std=2.0)
                 regime_colors = {0: "#00FF41", 1: "#FFD700", 2: "#FF0000"}
                 t_arr = np.linspace(0, 2 * np.pi, 100)
-                for cluster_idx, ell in enumerate(tied_ellipses):
+                for cluster_idx in range(price_clf.n_components):
+                    ell = price_clf.get_ellipse_params(cluster_idx, n_std=2.0)
                     regime_idx = price_clf._cluster_to_regime.get(cluster_idx, cluster_idx)
                     cos_a = np.cos(np.radians(ell["angle"]))
                     sin_a = np.sin(np.radians(ell["angle"]))
                     x_ell = (ell["width"] / 2) * np.cos(t_arr)
                     y_ell = (ell["height"] / 2) * np.sin(t_arr)
-                    x_rot = cos_a * x_ell - sin_a * y_ell + ell["x0"]
-                    y_rot = sin_a * x_ell + cos_a * y_ell + ell["y0"]
+                    x_rot = cos_a * x_ell - sin_a * y_ell + ell["center"][0]
+                    y_rot = sin_a * x_ell + cos_a * y_ell + ell["center"][1]
                     scatter_price.add_trace(go.Scatter(
                         x=x_rot, y=y_rot, mode='lines',
                         line=dict(color=regime_colors.get(regime_idx, "white"), width=1.5, dash='dash'),
@@ -560,7 +618,7 @@ with col_price_plot:
 
         scatter_price.update_layout(
             template="plotly_dark", plot_bgcolor='#0E1117', paper_bgcolor='#0E1117',
-            legend_title="Price Regime (Tied GMM)",
+            legend_title="Price Regime (Raw Full GMM)",
             margin=dict(l=20, r=20, b=20, t=20), height=450,
         )
         st.plotly_chart(scatter_price, use_container_width=True)
@@ -618,7 +676,9 @@ vn30_breadth_status = "Unified" if current_cse < 40 else ("Divergent" if current
 
 # Formatted code values
 wpe_formatted = f"<code>{current_wpe:.4f}</code>"
-flux_formatted = f"<code>{current_flux:+.3f}%</code>" if pd.notna(current_flux) else "<code>N/A</code>"
+spe_z_formatted = f"<code>{current_spe_z:+.3f}</code>" if pd.notna(current_spe_z) else "<code>N/A</code>"
+v_wpe_formatted = f"<code>{current_v_wpe:+.5f}</code>" if pd.notna(current_v_wpe) else "<code>N/A</code>"
+a_wpe_formatted = f"<code>{current_a_wpe:+.5f}</code>" if pd.notna(current_a_wpe) else "<code>N/A</code>"
 gz_formatted = f"<code>{current_vol_global_z:+.2f} Z</code>" if pd.notna(current_vol_global_z) else "<code>N/A</code>"
 sh_formatted = f"<code>{vol_sh_kpi}</code>"
 se_formatted = f"<code>{vol_se_kpi}</code>"
@@ -644,21 +704,26 @@ critical_block = f"""
 # Protocol logs
 protocol_logs = f"""
 > INITIATING TRI-VECTOR COMPOSITE ENGINE...<br>
-> FITTING STANDARDIZED SHOCK SPACE (PowerTransform + Tied GMM)...<br>
+> FITTING RAW ENTROPY PHASE SPACE (Full GMM, NO transform)...<br>
 > EXTRACTING VECTORS [V1: PRICE, V2: VOLUME, V3: BREADTH]...<br>
-> NORMALIZING VIA PowerTransformer(yeo-johnson) + MinMaxScaler PIPELINE...<br>
+> NORMALIZING VIA PowerTransformer(yeo-johnson) + MinMaxScaler PIPELINE (RISK ENGINE ONLY)...<br>
 > DYNAMIC RISK THRESHOLDS: ELEVATED = P75({elevated_bound:.1f}), CRITICAL = P90({critical_bound:.1f})<br>
 > WEIGHTED SYNTHESIS COMPLETE (40/40/20 MODEL).<br>
 """
 
-# Flux analysis
-flux_val = current_flux if pd.notna(current_flux) else 0.0
-if abs(flux_val) > 2.0:
-    flux_analysis = "Entropy momentum is in a high-energy state, indicating rapid structural change."
-elif abs(flux_val) > 0.5:
-    flux_analysis = "Moderate entropy flux detected. Structural transition is underway but controlled."
+# XAI Trajectory analysis
+v_wpe_val = current_v_wpe if pd.notna(current_v_wpe) else 0.0
+a_wpe_val = current_a_wpe if pd.notna(current_a_wpe) else 0.0
+if v_wpe_val > 0 and a_wpe_val > 0:
+    trajectory_analysis = "WPE is accelerating upward -- the system is rapidly approaching higher entropy (toward Chaos)."
+elif v_wpe_val > 0 and a_wpe_val < 0:
+    trajectory_analysis = "WPE is increasing but decelerating -- entropy growth is slowing, possible stabilization ahead."
+elif v_wpe_val < 0 and a_wpe_val < 0:
+    trajectory_analysis = "WPE is accelerating downward -- the system is rapidly cooling, structural order is being restored."
+elif v_wpe_val < 0 and a_wpe_val > 0:
+    trajectory_analysis = "WPE is decreasing but deceleration in the decline -- entropy may bottom out soon."
 else:
-    flux_analysis = "Entropy momentum is near equilibrium. Structural stability maintained."
+    trajectory_analysis = "Entropy trajectory is near stationary. No significant regime transition in progress."
 
 # Liquidity synthesis
 gz_val_safe = current_vol_global_z if pd.notna(current_vol_global_z) else 0.0
@@ -672,26 +737,61 @@ agent_log = f"""
 <div class="agent-log">
 {protocol_logs}
 <br>
-<h3>[ {T("TRI-VECTOR COMPOSITE RISK DIAGNOSTIC", "CHẨN ĐOÁN RỦI RO HỢP THÀNH TRI-VECTOR")} ]</h3>
+<h3>[ {T("TRI-VECTOR COMPOSITE RISK DIAGNOSTIC", "CHAN DOAN RUI RO HOP THANH TRI-VECTOR")} ]</h3>
 
-| Vector Module | Key Metrics | Scaled Value | Weight |
-| :--- | :--- | :--- | :--- |
-| **V1: Price Entropy** | WPE: {wpe_formatted} -- Flux: {flux_formatted} | <code>{contributions.get('V1_Price',0):.4f}</code> | **40%** |
-| **V2: Volume Entropy** | SampEn: {se_formatted} -- Macro Z: {gz_formatted} -- Shannon: {sh_formatted} | <code>{contributions.get('V2_Volume',0):.4f}</code> | **40%** |
-| **V3: VN30 Breadth** | Corr Entropy: {cse_formatted} -- MFI: {mfi_formatted} | <code>{contributions.get('V3_Breadth',0):.4f}</code> | **20%** |
-| **Composite Result** | Score: {risk_formatted}/100 -- Dominant: {dominant_strong} | -- | {status_strong} |
+| Vector Module | Key Metrics | Scaled Value | Weight | XAI % |
+| :--- | :--- | :--- | :--- | :--- |
+| **V1: Price Phase Space** | WPE: {wpe_formatted} -- SPE_Z: {spe_z_formatted} | <code>{contributions.get('V1_Price',0):.4f}</code> | **40%** | **{vector_info.get('contribution_percentages', {}).get('V1_Price', 0):.1f}%** |
+| **V2: Volume Entropy** | SampEn: {se_formatted} -- Macro Z: {gz_formatted} -- Shannon: {sh_formatted} | <code>{contributions.get('V2_Volume',0):.4f}</code> | **40%** | **{vector_info.get('contribution_percentages', {}).get('V2_Volume', 0):.1f}%** |
+| **V3: VN30 Breadth** | Corr Entropy: {cse_formatted} -- MFI: {mfi_formatted} | <code>{contributions.get('V3_Breadth',0):.4f}</code> | **20%** | **{vector_info.get('contribution_percentages', {}).get('V3_Breadth', 0):.1f}%** |
+| **Composite Result** | Score: {risk_formatted}/100 -- Dominant: {dominant_strong} | -- | {status_strong} | -- |
 
 {critical_block}
 
 <h3>[ {T("ANALYSIS", "PHAN TICH CHUYEN SAU")} ]</h3>
-**1. Price Entropy Dynamics.** WPE at {wpe_formatted} places the market in the {regime_strong} regime (Tied GMM Topological Slicing). Momentum Entropy Flux at {flux_formatted} indicates {'entropy heating (destabilizing)' if flux_val > 0 else 'entropy cooling (stabilizing)'}. {flux_analysis}
 
-**2. Volume-Price Fusion.** Current Liquidity Depth (Macro Z: {gz_formatted}) is {liquidity_direction} the current Price Regime ({regime_strong}). Volume structure is classified as {vol_regime_strong}. {'Liquidity is structurally aligned with price dynamics.' if vol_is_consensus else 'Structural fragility detected: volume behavior diverges from price entropy.'}
+<div class="analysis-card">
+    <div class="analysis-card-title">1. Price Phase Space Dynamics</div>
+    <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 10px;">
+        <span style="color: #888; font-size: 0.82rem;">GMM REGIME:</span>
+        <span class="regime-badge" style="background: {'rgba(0,255,65,0.15); color:#00FF41; border: 1px solid #00FF41' if 'STABLE' in current_regime.upper() else 'rgba(255,215,0,0.15); color:#FFD700; border: 1px solid #FFD700' if 'FRAGILE' in current_regime.upper() else 'rgba(255,49,49,0.15); color:#FF3131; border: 1px solid #FF3131'};">{current_regime.upper()}</span>
+    </div>
+    <div class="xai-trajectory-box">
+        <div class="xai-label">XAI Trajectory (Kinematic Overlay -- not ML features)</div>
+        <div class="xai-values">
+            <div class="xai-item">
+                <span class="xai-item-label">V_WPE:</span>
+                <span class="xai-item-value">{current_v_wpe:+.5f}</span>
+            </div>
+            <div class="xai-item">
+                <span class="xai-item-label">a_WPE:</span>
+                <span class="xai-item-value">{current_a_wpe:+.5f}</span>
+            </div>
+        </div>
+        <div class="xai-narrative">{trajectory_analysis}</div>
+    </div>
+</div>
 
-**3. Structural Breadth.** The Correlation Entropy (EVD) at {cse_formatted} identifies a {breadth_strong} internal structure. {vn30_analysis}
+<div class="analysis-card">
+    <div class="analysis-card-title">2. Volume-Price Fusion</div>
+    <div class="analysis-text">
+        Macro liquidity is <strong>{liquidity_direction}</strong> the current Price Regime ({regime_strong}).
+        Volume structure: {vol_regime_strong}.
+        {'Liquidity is structurally aligned with price dynamics.' if vol_is_consensus else 'Structural fragility detected: volume behavior diverges from price entropy.'}
+    </div>
+</div>
 
-<h3>[ {T("CONCLUSION", "KẾT LUẬN")} ]</h3>
-The Tri-Vector Composite engine reports a Risk Score of {risk_formatted}/100 ({status_strong}). The dominant risk contributor is {dominant_strong}. Market structural coherence is currently {'intact' if risk_score < 40 else 'under stress' if risk_score < 75 else 'critically degraded'}. The 40/40/20 weighted model confirms that {'systemic stability holds' if risk_score < 50 else 'structural divergence is active'}.
+<div class="analysis-card">
+    <div class="analysis-card-title">3. Structural Breadth</div>
+    <div class="analysis-text">
+        {vn30_analysis}
+    </div>
+</div>
+
+<h3>[ {T("CONCLUSION", "KET LUAN")} ]</h3>
+<strong>XAI ATTRIBUTION:</strong> Composite Risk {risk_formatted}/100 ({status_strong}). Dominant: {dominant_strong} ({vector_info.get('contribution_percentages', {}).get(dominant_vector, 0):.1f}%). Market coherence: {'intact' if risk_score < 40 else 'under stress' if risk_score < 75 else 'critically degraded'}. 
+<br>
+<strong>XAI TRAJECTORY:</strong> {trajectory_analysis}
 
 </div>
 """
