@@ -38,6 +38,36 @@ A Full-Covariance Gaussian Mixture Model (n=3) operates directly on raw [WPE, SP
 - **Transitional** (mid entropy) — Phase boundary between ordered and disordered states. *Moderate risk.*
 - **Stochastic** (high entropy) — Random walk behavior. Normal, healthy market. *Lowest risk.*
 
+### Unsupervised Regime Discovery — Visual Evidence
+
+The GMM discovers natural cluster boundaries in raw entropy feature space without any human-imposed thresholds or preprocessing.
+
+**Price Entropy Phase Space** (Plane 1: WPE × SPE_Z)
+
+![Price Phase Space](docs/images/price_phase_space.png)
+
+The scatter plot shows three distinct clusters emerging from raw entropy features:
+- **Red (Deterministic)**: Low WPE, negative SPE_Z — structured, predictable price patterns indicating coordinated behavior
+- **Yellow (Transitional)**: Mid-range entropy — the boundary between ordered and disordered states
+- **Green (Stochastic)**: High WPE, positive SPE_Z — random, complex price evolution characteristic of normal market conditions
+
+The dashed ellipses represent 95% confidence boundaries of each GMM component's full covariance matrix — each cluster has its own shape and orientation, capturing the true geometry of entropy distributions.
+
+**Volume Entropy Phase Space** (Plane 2: Shannon × SampEn)
+
+![Volume Phase Space](docs/images/volume_phase_space.png)
+
+Volume flow structure reveals three liquidity regimes:
+- **Blue (Consensus Flow)**: Low entropy — capital moves in organized, predictable patterns (institutional consensus)
+- **Purple (Dispersed Flow)**: Mid entropy — fragmented capital flow, no clear institutional agreement
+- **Red (Erratic/Noisy Flow)**: High entropy — chaotic liquidity with unpredictable volume impulses
+
+**Market Structure Timeline**
+
+![Market Structure](docs/images/market_structure.png)
+
+The regime classification overlaid on VNINDEX price history (2020–2026) demonstrates how entropy regimes align with market events. Note that Deterministic (red) periods coincide with both sharp rallies and sharp declines — entropy measures structural coordination, not direction.
+
 ### Conditional Volatility (GARCH)
 
 GARCH(1,1) provides the conditional volatility backbone, with entropy features tested as exogenous variables (GARCH-X). Filtered Historical Simulation computes Expected Shortfall (ES 5%) without assuming Gaussian tails.
@@ -65,6 +95,8 @@ Entropy-based regime labels significantly predict forward 20-day realized volati
 | **Stochastic** (Low Risk) | 15.15% | 11.54% | 340 |
 
 **Kruskal-Wallis H = 150.89, p < 0.0001** — Regime labels carry statistically significant information about future market risk.
+
+> **Note:** "Deterministic" does not mean "market will fall." It means "market structure is highly coordinated" — which can manifest as aggressive rallies *or* sharp declines. The higher forward volatility (21.59%) reflects the fact that coordinated states produce larger moves in *both* directions, consistent with the Type-2 chaos framework where structural order precedes instability.
 
 ### V3: Tail Risk Detection — Where Entropy Excels
 
@@ -120,6 +152,8 @@ Maximum entropy, by contrast, means maximum randomness — a market where divers
 **Entropy does not measure volatility. It measures the absence of dangerous coordination.**
 
 This insight directly connects to the Type-2 chaos hypothesis that motivated the project: in a system where participants observe and react to each other (reflexivity), order is a warning signal.
+
+**Practical implication:** Because Deterministic regimes coincide with both sharp rallies *and* sharp declines, the system is not a directional predictor. It is a **structural fragility detector**. When the market enters a Deterministic regime during a rally, it does not mean "sell now" — it means "the current trend is driven by coordination rather than diverse conviction, making it vulnerable to sharp reversals." This distinction between directional prediction and structural assessment is critical for responsible deployment in financial applications.
 
 ---
 

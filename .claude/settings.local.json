@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c \"import sys; print\\(sys.executable\\)\")",
+      "Bash(python -m pip --version)",
+      "Bash(python -m pip install matplotlib)",
+      "Bash(python validation/regime_validation.py)",
+      "Bash(python -m pip install vnstock)",
+      "Bash(taskkill /F /IM python.exe)",
+      "Bash(taskkill //F //IM python.exe)",
+      "Bash(python -c ':*)",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('validation/garch_forecast_eval.py'\\).read\\(\\)\\); print\\('Syntax OK'\\)\")",
+      "Bash(python validation/garch_forecast_eval.py)",
+      "Bash(python -m pip install arch)",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('dashboard.py'\\).read\\(\\)\\); print\\('OK'\\)\")"
+    ]
+  }
+}

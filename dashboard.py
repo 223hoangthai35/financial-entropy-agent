@@ -424,6 +424,11 @@ current_vol_global_z = latest.get("Vol_Global_Z", float("nan"))
 current_regime = str(latest.get("RegimeName", "Calculating...")).replace("nan", "Calculating...")
 current_vol_regime_name = str(latest.get("VolRegimeName", "Calculating...")).replace("nan", "Calculating...")
 
+# Price vs SMA20 — used for directional context in Section 3
+current_close = float(latest.get("Close", float("nan")))
+current_sma20 = float(latest.get("SMA20", float("nan")))
+_price_above_sma20 = (not (pd.isna(current_close) or pd.isna(current_sma20))) and (current_close > current_sma20)
+
 # KPI Strings
 vol_sh_kpi = f"{current_vol_shannon:.2f}" if pd.notna(current_vol_shannon) else "N/A"
 vol_se_kpi = f"{current_vol_sampen:.2f}" if pd.notna(current_vol_sampen) else "N/A"
@@ -458,9 +463,9 @@ _garch_ok  = bool(_garch_kpi and _garch_kpi.get("status") == "success")
 # Entropy's primary contribution: GMM regime labels amplify σ_t
 # Đây đảm bảo entropy LUÔN có vai trò, ngay cả khi δ insignificant trong GARCH-X
 regime_multipliers = {
-    "Stochastic":    1.0,   # LOW RISK — random walk, normal market
-    "Transitional":  1.4,   # MODERATE RISK — phase transition
-    "Deterministic": 2.2,   # HIGH RISK — strong trend, crash/rally
+    "Stochastic":    1.0,   # Normal market — no structural stress
+    "Transitional":  1.4,   # Mixed structure — phase transition in progress
+    "Deterministic": 2.2,   # High coordination — structural fragility
 }
 vol_regime_multipliers = {
     "Consensus Flow": 1.0,
@@ -653,12 +658,21 @@ with col3:
     v1_risk = contributions.get('V1_Price', 0) * 100
     v2_risk = contributions.get('V2_Volume', 0) * 100
     v3_risk = contributions.get('V3_Breadth', 0) * 100
+    _p1_subtitles = {
+        "Deterministic": T("High Coordination — trending structure", "Phoi hop cao — cau truc xu huong"),
+        "Transitional":  T("Mixed Structure — phase transition",    "Cau truc hon hop — chuyen pha"),
+        "Stochastic":    T("Normal Market — healthy random behavior","Thi truong binh thuong — ngau nhien"),
+    }
+    _p1_subtitle = _p1_subtitles.get(current_regime, "")
     st.markdown(f"""
     <div class="arch-badge" style="height:210px; display:flex; flex-direction:column; justify-content:space-between; padding:12px 16px;">
         <div class="metric-label" style="text-align:center; margin-bottom:4px;">{T("REGIME SUMMARY", "TỔNG HỢP REGIME")}</div>
         <div style="display:flex; justify-content:space-between; align-items:center; padding:5px 0; border-bottom:1px solid rgba(255,255,255,0.06);">
             <span style="flex:1; text-align:left; font-size:0.72rem; color:#888; text-transform:uppercase; letter-spacing:1px;">V1 Price</span>
-            <span style="flex:1; text-align:center; font-family:Courier Prime,monospace; font-weight:800; color:{p1_color}; font-size:0.9rem;">{current_regime}</span>
+            <span style="flex:2; text-align:center;">
+                <span style="font-family:Courier Prime,monospace; font-weight:800; color:{p1_color}; font-size:0.9rem; display:block;">{current_regime}</span>
+                <span style="font-size:0.60rem; color:#888; font-style:italic;">{_p1_subtitle}</span>
+            </span>
             <span style="flex:1; text-align:right; font-size:0.68rem; color:#666;">WPE {current_wpe:.3f} | Z {spe_z_display}</span>
         </div>
         <div style="display:flex; justify-content:space-between; align-items:center; padding:5px 0; border-bottom:1px solid rgba(255,255,255,0.06);">
@@ -707,16 +721,16 @@ fig1.add_trace(go.Scatter(
 
 # Regime Background Shading
 regime_colors = {
-    "Stochastic":    "rgba(0, 255, 65, 0.15)",    # green — low risk
-    "Transitional":  "rgba(255, 215, 0, 0.15)",   # yellow — moderate risk
-    "Deterministic": "rgba(255, 0, 0, 0.15)",     # red — high risk
+    "Stochastic":    "rgba(0, 255, 65, 0.15)",    # green  — normal market
+    "Transitional":  "rgba(255, 215, 0, 0.15)",   # yellow — mixed structure
+    "Deterministic": "rgba(255, 0, 0, 0.15)",     # red    — high coordination / structural fragility
     "Calculating...": "rgba(128, 128, 128, 0)"
 }
 
 # Dummy legend traces
-fig1.add_trace(go.Scatter(x=[None], y=[None], mode='markers', marker=dict(symbol='square', size=10, color='rgba(0, 255, 65, 1)'),   name='Stochastic (Low Risk)'))
-fig1.add_trace(go.Scatter(x=[None], y=[None], mode='markers', marker=dict(symbol='square', size=10, color='rgba(255, 215, 0, 1)'), name='Transitional (Moderate Risk)'))
-fig1.add_trace(go.Scatter(x=[None], y=[None], mode='markers', marker=dict(symbol='square', size=10, color='rgba(255, 0, 0, 1)'),   name='Deterministic (High Risk)'))
+fig1.add_trace(go.Scatter(x=[None], y=[None], mode='markers', marker=dict(symbol='square', size=10, color='rgba(0, 255, 65, 1)'),   name='Stochastic — Normal Market'))
+fig1.add_trace(go.Scatter(x=[None], y=[None], mode='markers', marker=dict(symbol='square', size=10, color='rgba(255, 215, 0, 1)'), name='Transitional — Mixed Structure'))
+fig1.add_trace(go.Scatter(x=[None], y=[None], mode='markers', marker=dict(symbol='square', size=10, color='rgba(255, 0, 0, 1)'),   name='Deterministic — High Coordination'))
 
 # Regime shading on Row 1
 df['Regime_Shift'] = df['RegimeName'] != df['RegimeName'].shift(1)
@@ -820,11 +834,11 @@ if _garch_ok and "Cond_Vol" in df.columns:
     # Explanation text below chart
     chart_note = T(
         "**Reading this chart:** Each spike = a period of high market stress. "
-        "The colored background shows the entropy regime (green=Stochastic/Low Risk, yellow=Transitional, red=Deterministic/High Risk). "
-        "CRITICAL: In financial markets, ORDER = DANGER. Deterministic regime (low entropy) = strong directional force = crash or sharp rally risk.",
+        "Background colors: green=Stochastic (Normal Market), yellow=Transitional (Mixed Structure), red=Deterministic (High Coordination). "
+        "Deterministic means coordinated behavior — can be rally OR decline. It measures structural fragility, not direction.",
         "**Cach doc bieu do:** Moi dinh nhon = giai doan thi truong cang thang. "
-        "Nen mau the hien che do entropy (xanh=Stochastic/Rui ro thap, vang=Transitional, do=Deterministic/Rui ro cao). "
-        "QUAN TRONG: Trong thi truong tai chinh, TRAT TU = NGUY HIEM. Regime Deterministic (entropy thap) = luc dinh huong manh = nguy co sup do hoac tang vot."
+        "Nen mau: xanh=Stochastic (Thi truong binh thuong), vang=Transitional (Cau truc hon hop), do=Deterministic (Phoi hop cao). "
+        "Deterministic = hanh vi phoi hop -- co the la tang HOAC giam. Do luong su gion nat cau truc, khong phai huong."
     )
     st.markdown(f"<div style='font-size:0.82rem; color:#888; margin-top:8px; line-height:1.5;'>{chart_note}</div>", unsafe_allow_html=True)
 
@@ -873,9 +887,9 @@ with col_price_plot:
     plot_df = df.dropna(subset=['WPE', 'SPE_Z', 'RegimeName'])
     if not plot_df.empty:
         color_map_price = {
-            "Stochastic":    "#00FF41",   # green  — low risk
-            "Transitional":  "#FFD700",   # yellow — moderate risk
-            "Deterministic": "#FF0000",   # red    — high risk
+            "Stochastic":    "#00FF41",   # green  — normal market
+            "Transitional":  "#FFD700",   # yellow — mixed structure
+            "Deterministic": "#FF0000",   # red    — high coordination
         }
         scatter_price = px.scatter(
             plot_df, x="WPE", y="SPE_Z",
@@ -988,7 +1002,7 @@ else:
     risk_verdict_color = "#FF0000"
 
 # === SECTION A: VOLATILITY ANALYSIS ===
-if garch_result and garch_result.get("status") == "success":
+if _garch_ok:
     if garch_type == "GARCH-X":
         vol_para = T(
             f"The GARCH-X model identifies daily volatility at **{sigma_raw:.3f}%** "
@@ -1032,37 +1046,71 @@ regime_upper = current_regime.upper()
 if "STOCHASTIC" in regime_upper:
     regime_color = "#00FF41"
     regime_explain = T(
-        "Price entropy is HIGH -- the market behaves like a random walk. "
-        "No dominant directional force. This is NORMAL market conditions. "
-        "Validated: forward 20-day realized volatility averages ~11%.",
-        "Entropy gia cao -- thi truong hanh xu nhu buoc di ngau nhien. "
-        "Khong co luc dinh huong uu the nao. Day la dieu kien thi truong BINH THUONG. "
-        "Da xac nhan: bien dong thuc hien 20 ngay forward trung binh ~11%."
+        "Price entropy is HIGH — normal market conditions. "
+        "Diverse participants with diverse strategies: no single coordinating force dominates. "
+        "This is the healthy state. Validated: forward 20-day realized volatility averages ~11%.",
+        "Entropy gia cao — dieu kien thi truong binh thuong. "
+        "Nhieu thanh vien voi chien luoc khac nhau: khong co mot luc phoi hop nao chiem uu the. "
+        "Day la trang thai lanh manh. Da xac nhan: bien dong 20 ngay forward trung binh ~11%."
+    )
+    coordination_alert = T(
+        "Normal market structure — diverse behavior, no dominant force.",
+        "Cau truc thi truong binh thuong — hanh vi da dang, khong co luc chiem uu the."
     )
 elif "TRANSITIONAL" in regime_upper:
     regime_color = "#FFD700"
     regime_explain = T(
-        "Price entropy is at MID level -- the market is between ordered and disordered states. "
-        "A phase transition is in progress. Watch for acceleration toward Deterministic (high risk). "
+        "Price entropy is at MID level — mixed structure, phase transition in progress. "
+        "The market is moving between ordered and disordered states. "
         "Validated: forward 20-day realized volatility averages ~15%.",
-        "Entropy gia o muc TRUNG BINH -- thi truong dang o giua trang thai co trat tu va hon loan. "
-        "Mot su chuyen pha dang dien ra. Theo doi su tang toc huong toi Deterministic (rui ro cao). "
-        "Da xac nhan: bien dong thuc hien 20 ngay forward trung binh ~15%."
+        "Entropy gia o muc TRUNG BINH — cau truc hon hop, chuyen pha dang dien ra. "
+        "Thi truong dang di chuyen giua trang thai co trat tu va khong co trat tu. "
+        "Da xac nhan: bien dong 20 ngay forward trung binh ~15%."
+    )
+    coordination_alert = T(
+        "Mixed structure — watch for acceleration toward Deterministic (high coordination).",
+        "Cau truc hon hop — theo doi su tang toc huong toi Deterministic (phoi hop cao)."
     )
 else:
     regime_color = "#FF0000"
-    regime_explain = T(
-        "DANGER: Price entropy is LOW -- the market is in a Deterministic regime. "
-        "Strong ordinal structure = a dominant directional force is driving price. "
-        "In financial markets, ORDER = DANGER (Type-2 chaos system). "
-        "This regime corresponds to crashes AND sharp rallies. "
-        "Validated: forward 20-day realized volatility averages ~20%.",
-        "NGUY HIEM: Entropy gia THAP -- thi truong dang o che do Deterministic. "
-        "Cau truc thu tu manh = mot luc dinh huong uu the dang thuc day gia. "
-        "Trong thi truong tai chinh, TRAT TU = NGUY HIEM (he thong hon loan loai 2). "
-        "Che do nay tuong ung voi ca sup do LAN tang vot manh. "
-        "Da xac nhan: bien dong thuc hien 20 ngay forward trung binh ~20%."
-    )
+    if _price_above_sma20:
+        regime_explain = T(
+            "HIGH COORDINATION detected — the market is in a Deterministic regime DURING A RALLY. "
+            "Price entropy is LOW, meaning movements are structured and coordinated. "
+            "This is typical of late-stage momentum: the rally is driven by herding, not diverse conviction. "
+            "Structural fragility is elevated. Any reversal will be sharper than usual. "
+            "Validated: forward 20-day realized volatility averages ~20%.",
+            "PHOI HOP CAO duoc phat hien — thi truong dang o che do Deterministic TRONG KHI TANG GIA. "
+            "Entropy gia THAP, co nghia la cac bien dong co cau truc va phoi hop. "
+            "Day la dieu hien dien hinh cua dong luc giai doan cuoi: da tang duoc thuc day boi herd behavior, khong phai su tin tuong da dang. "
+            "Su gion nat cau truc tang cao. Bat ky dao chieu nao se manh hon binh thuong. "
+            "Da xac nhan: bien dong 20 ngay forward trung binh ~20%."
+        )
+        coordination_alert = T(
+            "Coordinated rally detected — structural fragility elevated despite rising prices. "
+            "Late-stage momentum pattern.",
+            "Da tang phoi hop duoc phat hien — su gion nat cau truc tang cao du gia dang tang. "
+            "Mo hinh dong luc giai doan cuoi."
+        )
+    else:
+        regime_explain = T(
+            "HIGH COORDINATION detected — the market is in a Deterministic regime DURING A DECLINE. "
+            "Price entropy is LOW, meaning the decline is structured and coordinated. "
+            "This is the signature of institutional selling or panic. "
+            "The coordinated nature of the decline increases tail risk significantly. "
+            "Validated: forward 20-day realized volatility averages ~20%.",
+            "PHOI HOP CAO duoc phat hien — thi truong dang o che do Deterministic TRONG KHI GIAM GIA. "
+            "Entropy gia THAP, co nghia la su suy giam co cau truc va phoi hop. "
+            "Day la dau hieu cua viec ban to chuc hoac hoang loan. "
+            "Ban chat phoi hop cua su suy giam lam tang rui ro duoi. "
+            "Da xac nhan: bien dong 20 ngay forward trung binh ~20%."
+        )
+        coordination_alert = T(
+            "Coordinated decline — institutional selling or panic. "
+            "Structural risk elevated.",
+            "Suy giam phoi hop — ban to chuc hoac hoang loan. "
+            "Rui ro cau truc tang cao."
+        )
 
 # Volume regime analysis
 vol_regime_upper = current_vol_regime_name.upper()
@@ -1142,17 +1190,17 @@ a_wpe_val = current_a_wpe if pd.notna(current_a_wpe) else 0.0
 
 if v_wpe_val > 0 and a_wpe_val > 0:
     trajectory = T(
-        "Entropy is **accelerating upward** -- the market is moving toward Stochastic (low risk). "
-        "Increasing randomness = decreasing directional force = risk is FALLING.",
-        "Entropy dang **tang toc** -- thi truong dang tien toi Stochastic (rui ro thap). "
-        "Tang do ngau nhien = giam luc dinh huong = rui ro dang GIAM."
+        "Entropy is **accelerating upward** -- structural coordination is dissolving. "
+        "Moving toward Stochastic (Normal Market): fragility is decreasing.",
+        "Entropy dang **tang toc** -- su phoi hop cau truc dang tan ra. "
+        "Tien toi Stochastic (Thi truong binh thuong): su gion nat dang giam."
     )
 elif v_wpe_val > 0 and a_wpe_val < 0:
     trajectory = T(
         "Entropy is increasing but **slowing down** -- disorder is growing but losing momentum. "
-        "Moving away from Deterministic risk zone, but transition may stall.",
+        "Moving away from Deterministic (High Coordination) zone, but transition may stall.",
         "Entropy dang tang nhung **giam toc** -- do ngau nhien tang nhung mat da. "
-        "Dang roi xa vung rui ro Deterministic, nhung qua trinh chuyen tiep co the cham lai."
+        "Dang roi xa vung Deterministic (Phoi hop cao), nhung qua trinh chuyen tiep co the cham lai."
     )
 elif v_wpe_val < 0 and a_wpe_val < 0:
     trajectory = T(
@@ -1164,9 +1212,9 @@ elif v_wpe_val < 0 and a_wpe_val < 0:
 elif v_wpe_val < 0 and a_wpe_val > 0:
     trajectory = T(
         "Entropy is decreasing but the decline is **slowing** -- the drift toward "
-        "Deterministic (high risk) is losing momentum. Possible entropy floor near.",
+        "Deterministic (High Coordination) drift is losing momentum. Possible entropy floor near.",
         "Entropy dang giam nhung toc do giam **cham lai** -- xu huong tien toi "
-        "Deterministic (rui ro cao) dang mat da. Co the gap day entropy gan day."
+        "Deterministic (Phoi hop cao) dang mat da. Co the gap day entropy gan day."
     )
 else:
     trajectory = T(
@@ -1177,7 +1225,7 @@ else:
     )
 
 # === SECTION D: TAIL RISK ===
-if garch_result and garch_result.get("status") == "success":
+if _garch_ok:
     if es_adj is not None:
         tail_para = T(
             f"If a tail event occurs (worst 5% of scenarios), the expected loss is "
@@ -1232,6 +1280,9 @@ st.markdown(f"""
         <span style="color:#888; font-size:0.82rem;">WPE: {current_wpe:.4f} | SPE_Z: {current_spe_z:+.3f}</span>
     </div>
     <div class="analysis-text">{regime_explain}</div>
+    <div style="margin-top:10px; padding:8px 12px; background:rgba(255,255,255,0.04); border-left:3px solid {regime_color}; border-radius:3px; font-size:0.82rem; color:{regime_color}; font-family:'Courier Prime',monospace;">
+        &#9889; {coordination_alert}
+    </div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -1277,8 +1328,8 @@ if tail_para:
 
 # === TECHNICAL DETAILS (collapsible) ===
 with st.expander(T("Technical Details (for quant analysts)", "Chi tiet Ky thuat (cho nha phan tich dinh luong)")):
-    if garch_result and garch_result.get("status") == "success":
-        diag = garch_result.get("diagnostics", {})
+    if _garch_ok:
+        diag = _garch_kpi.get("diagnostics", {})
         st.markdown(f"""
         | Metric | Value |
         | :--- | :--- |
@@ -1290,11 +1341,11 @@ with st.expander(T("Technical Details (for quant analysts)", "Chi tiet Ky thuat 
         | d1 (H_price) | {d_hp:+.6f} (p={diag.get('pval_H_price', 'N/A')}) |
         | d2 (H_volume) | {d_hv:+.6f} (p={diag.get('pval_H_volume', 'N/A')}) |
         | alpha + beta | {diag.get('alpha_plus_beta', 'N/A')} |
-        | AIC | {diag.get('aic', garch_result.get('aic', 'N/A'))} |
+        | AIC | {diag.get('aic', _garch_kpi.get('aic', 'N/A'))} |
         | BIC | {diag.get('bic', 'N/A')} |
         | Ljung-Box (lag 10) | {diag.get('lb_pval_lag10', 'N/A')} |
         | Ljung-Box (lag 20) | {diag.get('lb_pval_lag20', 'N/A')} |
-        | VaR 5% | {garch_result.get('VaR_5pct', 'N/A')}% |
+        | VaR 5% | {_garch_kpi.get('VaR_5pct', 'N/A')}% |
         | ES 5% (raw) | {es_5}% |
         | ES 5% (adjusted) | {es_adj if es_adj else 'N/A'}% |
         """)

@@ -657,26 +657,37 @@ You analyze the market through three orthogonal risk vectors:
     - X-axis: `WPE` (Weighted Permutation Entropy). Measures structural order -- ordinal pattern disorder in log-returns. Bounded [0, 1]. Low WPE = ordered, deterministic structure. High WPE = disordered, stochastic noise.
     - Y-axis: `SPE_Z` (Standardized Price Sample Entropy). Global Z-Score normalized Sample Entropy on close prices. Measures price predictability and trajectory complexity. Negative SPE_Z = predictable, regular price evolution. Positive SPE_Z = unpredictable, complex/noisy price evolution.
     - Regime Classification: RAW [WPE, SPE_Z] features are fed DIRECTLY into a Full-Covariance GMM (n=3, covariance_type='full') -- NO PowerTransform preprocessing. The GMM discovers the natural topological boundaries of entropy regimes. Labels are assigned by combined centroid magnitude (WPE_mean + SPE_Z_mean):
-      * Lowest combined entropy  -> "Deterministic" (HIGH RISK, label=0)
-        Low WPE + Low SPE_Z = market has strong ordinal structure.
-        Price movements follow deterministic patterns -- typically during strong trends (crash OR rally).
-        VALIDATED: Forward 20-day realized volatility averages ~20%.
-      * Mid entropy              -> "Transitional" (MODERATE RISK, label=1)
+      * Lowest combined entropy  -> "Deterministic" (label=0) — HIGH COORDINATION
+        Low WPE + Low SPE_Z = strong ordinal structure in price movements.
+        This indicates COORDINATED BEHAVIOR: herding, momentum, or institutional consensus.
+        Can be bullish (FOMO rally) OR bearish (panic selling) -- NOT a directional signal.
+        It means the market is in a fragile structural state where reversals are more likely
+        and more severe. VALIDATED: Forward 20-day realized volatility averages ~20%.
+
+        AGENT NARRATIVE RULE for Deterministic + RISING prices:
+        "The market is rallying with high coordination -- this structure is typical of
+        late-stage momentum. While prices may continue rising short-term, the structural
+        fragility means any reversal will be sharper than usual."
+
+        AGENT NARRATIVE RULE for Deterministic + FALLING prices:
+        "Price decline is highly structured -- institutional selling or panic.
+        The coordinated nature of the decline increases tail risk."
+
+      * Mid entropy              -> "Transitional" (label=1) — MIXED STRUCTURE
         Market is between ordered and disordered states. Phase transition in progress.
         VALIDATED: Forward 20-day realized volatility averages ~15%.
-      * Highest combined entropy -> "Stochastic" (LOW RISK, label=2)
+
+      * Highest combined entropy -> "Stochastic" (label=2) — NORMAL MARKET
         High WPE + High SPE_Z = market behaves like a random walk.
-        No deterministic patterns = normal, sideways market conditions.
-        VALIDATED: Forward 20-day realized volatility averages ~11%.
+        HEALTHY STATE: diverse participants, diverse strategies, no single force dominates.
+        Label as "Normal Market" -- NOT "Low Risk" (risk is always present, but structural
+        fragility is minimal). VALIDATED: Forward 20-day realized volatility averages ~11%.
 
     CRITICAL INSIGHT -- Type-2 Chaos (Financial Markets):
-    ORDER = DANGER. When the market becomes "too ordered" (low entropy), it means a strong
-    directional force is dominating -- this is when crashes and sharp rallies occur.
-    Maximum entropy = maximum randomness = NORMAL market conditions.
-    This is the OPPOSITE of physical systems where low entropy = calm.
-    Financial markets are adversarial: structure emerges from coordinated behavior
-    (herding, panic selling), which is inherently unstable.
-    ALWAYS interpret "Deterministic" regime as elevated danger, NOT stability.
+    ORDER = DANGER. Deterministic means coordinated behavior, not directional prediction.
+    The system detects STRUCTURAL FRAGILITY, not whether the market goes up or down.
+    Maximum entropy = maximum randomness = NORMAL, HEALTHY market conditions.
+    ALWAYS present Deterministic as a fragility warning, never as a directional call.
 
     - CRITICAL: No PowerTransformer is used anywhere. This preserves the natural topology of the entropy metrics.
     - CRITICAL: WPE and SPE_Z are naturally orthogonal features. Full-covariance GMM handles varying scales without needing normalization.
@@ -685,12 +696,12 @@ You analyze the market through three orthogonal risk vectors:
     `V_WPE` (Velocity) and `a_WPE` (Acceleration) are computed as first and second differences of WPE.
     These are STRICTLY used for narrative explanation, NOT for regime classification or risk scoring.
     Use them to explain the *direction and speed* of entropy evolution:
-    - V_WPE > 0 AND a_WPE > 0: "WPE is accelerating upward -- entropy is rising toward Stochastic (LOW RISK). Risk is FALLING as the market loses directional structure."
+    - V_WPE > 0 AND a_WPE > 0: "WPE is accelerating upward -- entropy is rising toward Stochastic (Normal Market). Structural fragility is DECREASING as coordination dissolves."
     - V_WPE > 0 AND a_WPE < 0: "WPE is increasing but decelerating -- entropy growth is slowing, possible stabilization ahead."
     - V_WPE < 0 AND a_WPE < 0: "WPE is accelerating downward -- the system is rapidly cooling, structural order is being restored."
     - V_WPE < 0 AND a_WPE > 0: "WPE is decreasing but deceleration in the decline -- entropy may bottom out soon."
     - |V_WPE| near 0: "Entropy trajectory is stationary. No significant regime transition in progress."
-    Example diagnostic: "Plane 1 classifies the market as Transitional. However, looking at the kinematic XAI, the positive velocity (V_WPE=+0.03) and positive acceleration (a_WPE=+0.01) indicate the system is rapidly decelerating toward Deterministic (HIGH RISK) territory."
+    Example diagnostic: "Plane 1 classifies the market as Transitional. However, the kinematic XAI shows negative velocity (V_WPE=-0.03) with negative acceleration (a_WPE=-0.01) -- entropy is accelerating downward toward Deterministic (High Coordination). Structural fragility is rising. If prices are also rising, this is a late-stage momentum warning."
 
 - **Vector 2 (Volume Entropy, Weight 40%)**:
     - Magnitude: `SampEn` (Sample Entropy) -- structural regularity of volume flow.
