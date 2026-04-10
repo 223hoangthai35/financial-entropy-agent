@@ -230,73 +230,93 @@ lesson: **a model's meaning is context-dependent, not just its parameters.**
 
 ### Weighted Permutation Entropy (WPE)
 
-For a time series `{x_t}`, compute ordinal patterns of length `m` (embedding dimension) and weight each pattern by its amplitude variance:
+For a time series $\{x_t\}$ with embedding dimension $m$ and lag $\tau$, all ordinal patterns $\pi \in S_m$ (permutations of $m$ values) are extracted from overlapping windows and weighted by amplitude variance:
 
-```
-WPE = - sum_pi [ w(pi) * log(w(pi)) ]
+$$\text{WPE} = -\sum_{\pi \in S_m} w(\pi)\ln w(\pi)$$
 
-where:
-  pi     = ordinal pattern (permutation of m consecutive values)
-  w(pi)  = sum of variances of windows matching pattern pi
-         / total variance of all windows
-```
+The amplitude-weighted probability of each pattern $\pi$ is:
 
-**Parameters**: m=3, tau=1 (lag), window=22 days (1 trading month). The amplitude weighting distinguishes WPE from standard PE — large-amplitude patterns (panic moves, rallies) carry more weight than small random fluctuations.
+$$w(\pi) = \frac{\displaystyle\sum_{t\,:\,\text{ord}(x_t^{(m)}) = \pi} \text{Var}\!\left(x_t,\, x_{t+\tau},\, \ldots,\, x_{t+(m-1)\tau}\right)}{\displaystyle\sum_{t} \text{Var}\!\left(x_t,\, x_{t+\tau},\, \ldots,\, x_{t+(m-1)\tau}\right)}$$
 
-**Interpretation**: WPE in [0, log(m!)] normalized to [0, 1]. Low WPE = repeating ordinal patterns = coordinated, deterministic behavior. High WPE = diverse patterns = normal random market.
+Output is normalized to $[0,1]$ by dividing by $\ln(m!)$.
+
+**Parameters:** $m=3$, $\tau=1$, window $= 22$ days.
+
+**Interpretation:** Low $\text{WPE}$ $\Rightarrow$ repeating ordinal patterns $\Rightarrow$ coordinated, deterministic behavior. High $\text{WPE}$ $\Rightarrow$ diverse patterns $\Rightarrow$ normal random market. The amplitude weighting ensures large-magnitude events (panic, rallies) carry more weight than small random fluctuations.
+
+---
 
 ### Sample Entropy (SampEn)
 
-SampEn measures the probability that two similar m-length templates remain similar at length m+1:
+SampEn measures the conditional probability that two $m$-length subsequences, similar within tolerance $r$, remain similar at length $m+1$:
 
-```
-SampEn(m, r) = -log( A / B )
+$$\text{SampEn}(m,\, r) = -\ln\!\left(\frac{A}{B}\right)$$
 
-where:
-  B = number of template pairs within tolerance r at length m
-  A = number of template pairs within tolerance r at length m+1
-  r = 0.2 * std(window)   (adaptive tolerance, 20% of local sigma)
-```
+where $B$ counts template pairs within tolerance $r$ at length $m$, $A$ counts the same at length $m+1$, and the adaptive tolerance is:
 
-**Parameters**: m=2, r=0.2*sigma, window=60 days. SPE_Z is the rolling Z-score of SampEn: `(SampEn_t - mean_t) / std_t`.
+$$r = 0.2 \times \sigma_{\text{window}}$$
 
-**Interpretation**: Low SampEn = highly predictable price trajectory (low complexity). High SampEn = complex, irregular path (high complexity). Unlike WPE (ordinal structure), SampEn captures amplitude-space complexity.
+The feature fed into the GMM is the rolling Z-score:
+
+$$\text{SPE\_Z}_t = \frac{\text{SampEn}_t - \bar{\mu}_t}{\bar{\sigma}_t}$$
+
+**Parameters:** $m=2$, $r=0.2\,\sigma$, window $= 60$ days.
+
+**Interpretation:** Low $\text{SampEn}$ $\Rightarrow$ predictable price trajectory (low complexity). Unlike WPE (ordinal structure), SampEn captures amplitude-space complexity.
+
+---
 
 ### Shannon Volume Entropy
 
-```
-H_Shannon = - sum_i [ p_i * log(p_i) ]
+Applied to the rolling 60-day distribution of normalized volume:
 
-where p_i = probability mass in bin i of the normalized volume distribution
-```
+$$H_{\text{Shannon}} = -\sum_{i=1}^{N} p_i \ln p_i$$
 
-Applied to rolling 60-day volume windows. Measures whether capital flow is concentrated (few dominant volume days → low entropy) or dispersed (uniform distribution → high entropy).
+where $p_i$ is the probability mass in bin $i$ of the discretized volume histogram. Measures capital flow concentration: few dominant volume days $\Rightarrow$ low $H$ (institutional consensus). Uniform distribution $\Rightarrow$ high $H$ (dispersed, no agreement).
+
+---
 
 ### GMM Regime Classifier
 
+Full-covariance Gaussian Mixture Model with $k=3$ components fitted on $\mathbf{x} = [\text{WPE},\, \text{SPE\_Z}]^\top$:
+
+$$p(\mathbf{x}) = \sum_{k=1}^{3} \pi_k\; \mathcal{N}\!\left(\mathbf{x} \mid \boldsymbol{\mu}_k,\, \boldsymbol{\Sigma}_k\right)$$
+
+Each component has its own mean $\boldsymbol{\mu}_k \in \mathbb{R}^2$ and free covariance $\boldsymbol{\Sigma}_k \in \mathbb{R}^{2\times 2}$, allowing elongated, rotated clusters that axis-aligned covariance would miss.
+
 | Parameter | Value | Rationale |
 |:----------|:------|:----------|
-| n_components | 3 | Three regimes from physics analogy: ordered / transition / disordered |
-| covariance_type | full | Each cluster has its own shape and orientation — no isotropy assumption |
-| n_init | 10 | Multiple initializations to escape local optima |
-| Preprocessing | None (Plane 1) | Raw [WPE, SPE_Z] features — the natural scale carries physical meaning |
-| Features | [WPE, SPE_Z] | Two orthogonal entropy axes: ordinal disorder × trajectory complexity |
+| $k$ (components) | 3 | Three phases: ordered / transition / disordered |
+| Covariance type | Full | Discovers true geometric structure of entropy distributions |
+| `n_init` | 10 | Multiple restarts to avoid local optima |
+| Preprocessing | None (Plane 1) | Raw $[\text{WPE},\, \text{SPE\_Z}]$ — natural scale carries physical meaning |
+| Preprocessing | Yeo-Johnson (Plane 2) | Right-skewed volume features require normalization before GMM |
 
-The full covariance matrix allows GMM to discover the true geometric structure of entropy distributions — elongated, rotated clusters that axis-aligned covariance would miss.
+---
 
-### GARCH(1,1) Variance Equation
+### GARCH(1,1) and GARCH-X Variance Equations
 
-```
-sigma^2_t = omega + alpha * epsilon^2_{t-1} + beta * sigma^2_{t-1}
+Base conditional variance model:
 
-where:
-  omega  = long-run variance floor
-  alpha  = reaction coefficient (sensitivity to shocks)
-  beta   = persistence coefficient (variance memory)
-  alpha + beta < 1  (stationarity constraint)
-```
+$$\sigma_t^2 = \omega + \alpha\,\varepsilon_{t-1}^2 + \beta\,\sigma_{t-1}^2, \qquad \alpha + \beta < 1$$
 
-**Filtered Historical Simulation**: Rather than assuming Gaussian tails, standardized residuals `z_t = epsilon_t / sigma_t` are drawn from empirical historical distribution. VaR 5% and ES 5% are computed from quantiles of `sigma_t * z_{historical}`. This handles VNINDEX's fat tails and jump risk (circuit breakers, policy shocks) that parametric VaR cannot capture.
+where $\omega > 0$ is the long-run variance floor, $\alpha$ the shock reaction coefficient, and $\beta$ the persistence parameter. The stationarity constraint $\alpha + \beta < 1$ ensures mean-reversion.
+
+When entropy exogenous variables pass statistical pruning ($p < 0.10$), the model extends to GARCH-X:
+
+$$\sigma_t^2 = \omega + \alpha\,\varepsilon_{t-1}^2 + \beta\,\sigma_{t-1}^2 + \boldsymbol{\gamma}^\top \mathbf{z}_{t-1}$$
+
+where $\mathbf{z}_{t-1}$ are lagged, MinMaxScaled entropy features over a 504-day rolling window. Variables with $p > 0.10$ are dropped; if all are pruned the model reduces to pure GARCH(1,1).
+
+The regime stress multiplier amplifies $\sigma_t$ to reflect structural vulnerabilities detected by the GMM:
+
+$$\sigma_{\text{adj}} = \sigma_t \times m_{\text{regime}}, \qquad m \in \{1.0,\; 1.4,\; 2.2\}$$
+
+**Filtered Historical Simulation** for tail risk: standardized residuals $z_t = \varepsilon_t / \sigma_t$ are drawn from their empirical distribution rather than a Gaussian assumption.
+
+$$\text{VaR}_{5\%} = \sigma_t \cdot Q_{0.05}\!\left(\{z_s\}\right), \qquad \text{ES}_{5\%} = \sigma_t \cdot \mathbb{E}\!\left[z_s \mid z_s < Q_{0.05}\right]$$
+
+This handles VNINDEX's fat tails and jump risk (circuit breakers, policy shocks) that parametric VaR cannot capture.
 
 ---
 
