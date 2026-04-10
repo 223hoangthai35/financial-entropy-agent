@@ -48,7 +48,9 @@ class EntropyPhaseSpaceClassifier:
         - PowerTransform ep du lieu thanh Gaussian blob, pha huy
           topological boundaries tu nhien cua entropy metrics.
         - Full-covariance GMM du suc xu ly varying scales giua features.
-        - Giong cach Plane 2 (Volume) hoat dong: raw features -> GMM.
+        - Khac Plane 2 (Volume): Vol_Shannon/Vol_SampEn co phan phoi lech
+          (right-skewed) nen Plane 2 can Yeo-Johnson truoc GMM.
+          Plane 1 entropy metrics da co phan phoi phu hop GMM truc tiep.
     """
 
     def __init__(

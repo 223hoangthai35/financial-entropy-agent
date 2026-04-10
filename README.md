@@ -314,7 +314,7 @@ $$\sigma_{\text{adj}} = \sigma_t \times m_{\text{regime}}, \qquad m \in \lbrace 
 
 **Filtered Historical Simulation** for tail risk: standardized residuals $z_t = \varepsilon_t / \sigma_t$ are drawn from their empirical distribution rather than a Gaussian assumption.
 
-$$\text{VaR}_{5\%} = \sigma_t \cdot Q_{0.05}\!\left(\lbrace z_s \rbrace\right), \qquad \text{ES}_{5\%} = \sigma_t \cdot \mathbb{E}\!\left[z_s \mid z_s < Q_{0.05}\right]$$
+$$\text{VaR}_{0.05} = \sigma_t \cdot Q_{0.05}\!\left(\lbrace z_s \rbrace\right), \qquad \text{ES}_{0.05} = \sigma_t \cdot \mathbb{E}\!\left[z_s \mid z_s < Q_{0.05}\right]$$
 
 This handles VNINDEX's fat tails and jump risk (circuit breakers, policy shocks) that parametric VaR cannot capture.
 
