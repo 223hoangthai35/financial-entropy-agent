@@ -1,0 +1,154 @@
+{
+  "config": {
+    "hysteresis": {
+      "delta_hard": 0.6,
+      "delta_soft": 0.35,
+      "t_persist": 8
+    },
+    "common_window": [
+      "2022-01-01",
+      "2026-04-17"
+    ],
+    "data_window": [
+      "2020-01-01",
+      "2026-04-17"
+    ],
+    "ratio_threshold": 1.5,
+    "native_bpy": {
+      "VNINDEX": 252,
+      "SP500": 252,
+      "BTC": 365
+    },
+    "equity_bpy": 252
+  },
+  "covid_disclosure": "The 504-day rolling SPE_Z window precludes labeling for approximately the first two years of each dataset. The COVID-19 shock (March 2020) falls in the unlabelable region. Cross-market headline comparison covers 2022-01-01 onwards, spanning Russia-Ukraine war onset, global credit tightening (SVB, Credit Suisse), and Vietnamese domestic credit events (Tan Hoang Minh, bond market freeze) -- a range of macro regimes sufficient to test cross-market microstructure dependency.",
+  "headline": {
+    "name": "HEADLINE",
+    "description": "common window 2022-01-01 -> 2026-04-17, native calendars (BTC=365, VN/SPX=252)",
+    "rows": {
+      "VNINDEX": {
+        "market": "VNINDEX",
+        "n_bars": 1006,
+        "n_flips": 31,
+        "years_native": 3.992063492063492,
+        "years_equity": 3.992063492063492,
+        "flips_per_yr": 7.7654075546719685,
+        "window_start": "2022-04-06",
+        "window_end": "2026-04-17",
+        "multiplier": 252
+      },
+      "SP500": {
+        "market": "SP500",
+        "n_bars": 1017,
+        "n_flips": 38,
+        "years_native": 4.035714285714286,
+        "years_equity": 4.035714285714286,
+        "flips_per_yr": 9.415929203539823,
+        "window_start": "2022-03-28",
+        "window_end": "2026-04-16",
+        "multiplier": 252
+      },
+      "BTC": {
+        "market": "BTC",
+        "n_bars": 1567,
+        "n_flips": 51,
+        "years_native": 4.293150684931507,
+        "years_equity": 6.218253968253968,
+        "flips_per_yr": 11.879387364390555,
+        "window_start": "2022-01-01",
+        "window_end": "2026-04-16",
+        "multiplier": 365
+      }
+    },
+    "vn_over_sp_ratio": 0.82470963691535,
+    "vn_over_btc_ratio": 0.6536875443551424,
+    "ordering": "BTC(11.9) > SP500(9.4) > VNINDEX(7.8)",
+    "h1_supported": false
+  },
+  "robustness_1": {
+    "name": "ROBUSTNESS_1",
+    "description": "common window 2022-01-01 -> 2026-04-17, equity-equivalent normalization (all multiplied by 252)",
+    "rows": {
+      "VNINDEX": {
+        "market": "VNINDEX",
+        "n_bars": 1006,
+        "n_flips": 31,
+        "years_native": 3.992063492063492,
+        "years_equity": 3.992063492063492,
+        "flips_per_yr": 7.7654075546719685,
+        "window_start": "2022-04-06",
+        "window_end": "2026-04-17",
+        "multiplier": 252
+      },
+      "SP500": {
+        "market": "SP500",
+        "n_bars": 1017,
+        "n_flips": 38,
+        "years_native": 4.035714285714286,
+        "years_equity": 4.035714285714286,
+        "flips_per_yr": 9.415929203539823,
+        "window_start": "2022-03-28",
+        "window_end": "2026-04-16",
+        "multiplier": 252
+      },
+      "BTC": {
+        "market": "BTC",
+        "n_bars": 1567,
+        "n_flips": 51,
+        "years_native": 4.293150684931507,
+        "years_equity": 6.218253968253968,
+        "flips_per_yr": 8.201659221442247,
+        "window_start": "2022-01-01",
+        "window_end": "2026-04-16",
+        "multiplier": 252
+      }
+    },
+    "vn_over_sp_ratio": 0.82470963691535,
+    "vn_over_btc_ratio": 0.9468093400382022,
+    "ordering": "SP500(9.4) > BTC(8.2) > VNINDEX(7.8)",
+    "h1_supported": false
+  },
+  "robustness_2": {
+    "name": "ROBUSTNESS_2",
+    "description": "full per-market labelable window, native calendars",
+    "rows": {
+      "VNINDEX": {
+        "market": "VNINDEX",
+        "n_bars": 1006,
+        "n_flips": 31,
+        "years_native": 3.992063492063492,
+        "years_equity": 3.992063492063492,
+        "flips_per_yr": 7.7654075546719685,
+        "window_start": "2022-04-06",
+        "window_end": "2026-04-17",
+        "multiplier": 252
+      },
+      "SP500": {
+        "market": "SP500",
+        "n_bars": 1017,
+        "n_flips": 38,
+        "years_native": 4.035714285714286,
+        "years_equity": 4.035714285714286,
+        "flips_per_yr": 9.415929203539823,
+        "window_start": "2022-03-28",
+        "window_end": "2026-04-16",
+        "multiplier": 252
+      },
+      "BTC": {
+        "market": "BTC",
+        "n_bars": 1735,
+        "n_flips": 56,
+        "years_native": 4.7534246575342465,
+        "years_equity": 6.884920634920635,
+        "flips_per_yr": 11.780979827089338,
+        "window_start": "2021-07-17",
+        "window_end": "2026-04-16",
+        "multiplier": 365
+      }
+    },
+    "vn_over_sp_ratio": 0.82470963691535,
+    "vn_over_btc_ratio": 0.6591478526103652,
+    "ordering": "BTC(11.8) > SP500(9.4) > VNINDEX(7.8)",
+    "h1_supported": false
+  }
+}
